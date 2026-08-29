@@ -7,7 +7,7 @@ function scoreCurrentActivity(answer) {
     "Some activity, but inconsistent": 1,
     "1–2 times per week": 2,
     "3–4 times per week": 3.5,
-    "5+ times per week": 5
+    "5+ times per week": 5,
   };
   return scoreMap[answer];
 }
@@ -26,7 +26,7 @@ function scoreTrainingContribution(answer) {
     "3 sessions per week": 7,
     "4 sessions per week": 9,
     "5+ sessions per week": 10,
-    "I'd like advice on this": null  // NULL means "needs discussion", not zero
+    "I'd like advice on this": null, // NULL means "needs discussion", not zero
   };
   return scoreMap[answer];
 }
@@ -44,7 +44,7 @@ function scoreONETEQFrequency(answer) {
     "2 sessions per week": 2,
     "3 sessions per week": 3,
     "4+ sessions per week": 4,
-    "I'd like you to recommend this": null
+    "I'd like you to recommend this": null,
   };
   return scoreMap[answer];
 }
@@ -56,7 +56,7 @@ function scoreProgrammingSupportNeed(answer) {
     "Fairly confident": 3,
     "Not very confident": 5,
     "Not confident at all": 8,
-    "Unsure": null
+    Unsure: null,
   };
   return scoreMap[answer];
 }
@@ -69,7 +69,7 @@ function scoreTechniqueSupportNeed(answer) {
     "Somewhat confident": 5,
     "Not very confident": 8,
     "Not confident at all": 10,
-    "It depends on the exercise / I'm unsure": null
+    "It depends on the exercise / I'm unsure": null,
   };
   return scoreMap[answer];
 }
@@ -86,7 +86,7 @@ function scoreConsistencySupportNeed(answer) {
     "It varies": 5,
     "Quite difficult – often fall out of routine": 8,
     "Very difficult – much more likely if someone expects me": 10,
-    "I'm not sure": null
+    "I'm not sure": null,
   };
   return scoreMap[answer];
 }
@@ -99,7 +99,7 @@ function scoreDesiredAccountabilityLevel(answer) {
     "Regular support": 6,
     "High level": 8,
     "Very high/frequent": 10,
-    "Recommend what you think would work best": null
+    "Recommend what you think would work best": null,
   };
   return scoreMap[answer];
 }
@@ -109,10 +109,10 @@ function scoreCurrentClinicalImpact(answer) {
   const scoreMap = {
     "Not at all": 0,
     "A little": 3,
-    "Moderately": 6,
-    "Significantly": 8,
+    Moderately: 6,
+    Significantly: 8,
     "Very significantly": 10,
-    "Unsure": null
+    Unsure: null,
   };
   return scoreMap[answer];
 }
@@ -124,12 +124,12 @@ console.log("Q10 Score:", scoreCurrentClinicalImpact("A little"));
 // Q11: Recurrence Concern → Recurrence Concern score
 function scoreRecurrenceConcern(answer) {
   const scoreMap = {
-    "No": 0,
+    No: 0,
     "Yes, but I'm confident managing it": 2,
     "I'd like advice about reducing recurrence": 5,
     "It has returned more than once": 7,
     "I'm concerned increasing exercise could make it worse": 9,
-    "Unsure": null
+    Unsure: null,
   };
   return scoreMap[answer];
 }
@@ -138,11 +138,11 @@ function scoreRecurrenceConcern(answer) {
 function scoreNutritionRelevance(answer) {
   const scoreMap = {
     "Not particularly": 1,
-    "Slightly": 3,
-    "Moderately": 5,
-    "Very": 8,
-    "Essential": 10,
-    "Unsure": null
+    Slightly: 3,
+    Moderately: 5,
+    Very: 8,
+    Essential: 10,
+    Unsure: null,
   };
   return scoreMap[answer];
 }
@@ -155,16 +155,24 @@ function scoreNutritionCurrentSupportNeed(answer) {
     "Somewhat confident": 5,
     "Not very confident": 8,
     "Not confident at all": 10,
-    "Unsure": null
+    Unsure: null,
   };
   return scoreMap[answer];
 }
 
 // Test all three
-console.log("Q11 Score:", scoreRecurrenceConcern("It has returned more than once"));
+console.log(
+  "Q11 Score:",
+  scoreRecurrenceConcern("It has returned more than once"),
+);
 console.log("Q13 Score:", scoreNutritionRelevance("Very"));
-console.log("Q14 Score:", scoreNutritionCurrentSupportNeed("Not very confident"));
-console.log("--- SESSION 1 COMPLETE: Q3-Q14 scoring functions built and verified ---");
+console.log(
+  "Q14 Score:",
+  scoreNutritionCurrentSupportNeed("Not very confident"),
+);
+console.log(
+  "--- SESSION 1 COMPLETE: Q3-Q14 scoring functions built and verified ---",
+);
 // Q12: Previous Treatment → modifies the Q10 clinical impact score
 // Rule: resolved + Q10=0 → -1 (minimum 0) | never resolved → +1 | keeps recurring → +2 | currently receiving treatment → flag only, no score change
 function scoreClinicalModifier(q10Answer, q10Score, q12Answer) {
@@ -188,23 +196,27 @@ function scoreClinicalModifier(q10Answer, q10Score, q12Answer) {
   return {
     modifier: modifier,
     adjustedClinicalScore: adjustedScore,
-    currentlyReceivingTreatment: flagCurrentTreatment
+    currentlyReceivingTreatment: flagCurrentTreatment,
   };
 }
 
 // Test it
 const q10TestScore = scoreCurrentClinicalImpact("Not at all"); // should be 0
-const q12Result = scoreClinicalModifier("It has returned more than once", q10TestScore, "Yes – and it resolved");
+const q12Result = scoreClinicalModifier(
+  "It has returned more than once",
+  q10TestScore,
+  "Yes – and it resolved",
+);
 console.log("Q12 Test Result:", q12Result);
 // Q15: Desired Nutrition Support → Desired Nutrition Support score
 function scoreDesiredNutritionSupport(answer) {
   const scoreMap = {
-    "None": 0,
+    None: 0,
     "Occasional guidance": 3,
     "Some ongoing support": 6,
     "High level": 8,
     "Intensive/high-touch": 10,
-    "Recommend for me": null
+    "Recommend for me": null,
   };
   return scoreMap[answer];
 }
@@ -213,11 +225,11 @@ function scoreDesiredNutritionSupport(answer) {
 function scorePerformanceImportance(answer) {
   const scoreMap = {
     "Not particularly": 0,
-    "Slightly": 2,
-    "Moderately": 5,
-    "Very": 8,
-    "Extremely": 10,
-    "Unsure": null
+    Slightly: 2,
+    Moderately: 5,
+    Very: 8,
+    Extremely: 10,
+    Unsure: null,
   };
   return scoreMap[answer];
 }
@@ -225,12 +237,12 @@ function scorePerformanceImportance(answer) {
 // Q17: Event Training → Event Performance Relevance score
 function scoreEventPerformanceRelevance(answer) {
   const scoreMap = {
-    "No": 0,
+    No: 0,
     "Not currently, but I'd like to work towards something": 3,
     "Yes – recreationally / for enjoyment": 5,
     "Yes – specific event/race/target": 8,
     "Yes – competition/performance is a significant priority": 10,
-    "Unsure": null
+    Unsure: null,
   };
   return scoreMap[answer];
 }
@@ -238,16 +250,19 @@ function scoreEventPerformanceRelevance(answer) {
 // Test all three
 console.log("Q15 Score:", scoreDesiredNutritionSupport("Some ongoing support"));
 console.log("Q16 Score:", scorePerformanceImportance("Very"));
-console.log("Q17 Score:", scoreEventPerformanceRelevance("Yes – specific event/race/target"));
+console.log(
+  "Q17 Score:",
+  scoreEventPerformanceRelevance("Yes – specific event/race/target"),
+);
 // Q18: Objective Data Interest → Objective Data Interest score
 function scoreObjectiveDataInterest(answer) {
   const scoreMap = {
     "Not important": 0,
     "Nice to know": 2,
-    "Useful": 5,
+    Useful: 5,
     "Very useful": 8,
     "Extremely valuable": 10,
-    "Unsure": null
+    Unsure: null,
   };
   return scoreMap[answer];
 }
@@ -260,7 +275,7 @@ function scoreRecoverySupportNeed(answer) {
     "Reasonably – sometimes affects what I do": 5,
     "Not particularly well – regularly affects activity/training": 8,
     "Poorly – significant barrier": 10,
-    "Unsure": null
+    Unsure: null,
   };
   return scoreMap[answer];
 }
@@ -268,18 +283,21 @@ function scoreRecoverySupportNeed(answer) {
 // Q20: Desired Recovery Support → Desired Recovery Support score
 function scoreDesiredRecoverySupport(answer) {
   const scoreMap = {
-    "None": 0,
+    None: 0,
     "Occasional advice/support": 3,
     "Regular support": 6,
     "High level": 9,
-    "Recommend for me": null
+    "Recommend for me": null,
   };
   return scoreMap[answer];
 }
 
 // Test all three
 console.log("Q18 Score:", scoreObjectiveDataInterest("Very useful"));
-console.log("Q19 Score:", scoreRecoverySupportNeed("Reasonably – sometimes affects what I do"));
+console.log(
+  "Q19 Score:",
+  scoreRecoverySupportNeed("Reasonably – sometimes affects what I do"),
+);
 console.log("Q20 Score:", scoreDesiredRecoverySupport("Regular support"));
 console.log("--- ALL INPUT SCORING FUNCTIONS COMPLETE: Q3-Q20 ---");
 // ===== SEVEN-AXIS RADAR SCORES =====
@@ -290,23 +308,30 @@ function calculateCoachingAxis(programmingSupportNeed, techniqueSupportNeed) {
   if (programmingSupportNeed === null || techniqueSupportNeed === null) {
     return { score: null, unresolved: true };
   }
-  const score = (0.55 * programmingSupportNeed) + (0.45 * techniqueSupportNeed);
+  const score = 0.55 * programmingSupportNeed + 0.45 * techniqueSupportNeed;
   return { score: Math.round(score * 10) / 10, unresolved: false }; // rounds to 1 decimal
 }
 
-function calculateAccountabilityAxis(consistencySupportNeed, desiredAccountabilityLevel) {
+function calculateAccountabilityAxis(
+  consistencySupportNeed,
+  desiredAccountabilityLevel,
+) {
   if (consistencySupportNeed === null || desiredAccountabilityLevel === null) {
     return { score: null, unresolved: true };
   }
-  const score = (0.70 * consistencySupportNeed) + (0.30 * desiredAccountabilityLevel);
+  const score = 0.7 * consistencySupportNeed + 0.3 * desiredAccountabilityLevel;
   return { score: Math.round(score * 10) / 10, unresolved: false };
 }
 
-function calculateClinicalSupportAxis(currentClinicalImpact, recurrenceConcern, q12Modifier) {
+function calculateClinicalSupportAxis(
+  currentClinicalImpact,
+  recurrenceConcern,
+  q12Modifier,
+) {
   if (currentClinicalImpact === null || recurrenceConcern === null) {
     return { score: null, unresolved: true };
   }
-  let score = (0.70 * currentClinicalImpact) + (0.30 * recurrenceConcern);
+  let score = 0.7 * currentClinicalImpact + 0.3 * recurrenceConcern;
   score = score + q12Modifier; // apply the Q12 modifier
   if (score < 0) score = 0;
   if (score > 10) score = 10; // capped at 10 per the brief
@@ -322,27 +347,52 @@ console.log("Accountability Axis:", accountabilityAxis);
 
 const clinicalAxis = calculateClinicalSupportAxis(3, 7, 0); // Q10=3, Q11=7, no modifier
 console.log("Clinical Support Axis:", clinicalAxis);
-function calculateNutritionSupportAxis(nutritionRelevance, nutritionCurrentSupportNeed, desiredNutritionSupport) {
-  if (nutritionRelevance === null || nutritionCurrentSupportNeed === null || desiredNutritionSupport === null) {
+function calculateNutritionSupportAxis(
+  nutritionRelevance,
+  nutritionCurrentSupportNeed,
+  desiredNutritionSupport,
+) {
+  if (
+    nutritionRelevance === null ||
+    nutritionCurrentSupportNeed === null ||
+    desiredNutritionSupport === null
+  ) {
     return { score: null, unresolved: true };
   }
-  const score = (0.30 * nutritionRelevance) + (0.50 * nutritionCurrentSupportNeed) + (0.20 * desiredNutritionSupport);
+  const score =
+    0.3 * nutritionRelevance +
+    0.5 * nutritionCurrentSupportNeed +
+    0.2 * desiredNutritionSupport;
   return { score: Math.round(score * 10) / 10, unresolved: false };
 }
 
-function calculatePerformanceFocusAxis(performanceImportance, eventPerformanceRelevance, objectiveDataInterest) {
-  if (performanceImportance === null || eventPerformanceRelevance === null || objectiveDataInterest === null) {
+function calculatePerformanceFocusAxis(
+  performanceImportance,
+  eventPerformanceRelevance,
+  objectiveDataInterest,
+) {
+  if (
+    performanceImportance === null ||
+    eventPerformanceRelevance === null ||
+    objectiveDataInterest === null
+  ) {
     return { score: null, unresolved: true };
   }
-  const score = (0.45 * performanceImportance) + (0.30 * eventPerformanceRelevance) + (0.25 * objectiveDataInterest);
+  const score =
+    0.45 * performanceImportance +
+    0.3 * eventPerformanceRelevance +
+    0.25 * objectiveDataInterest;
   return { score: Math.round(score * 10) / 10, unresolved: false };
 }
 
-function calculateRecoverySupportAxis(recoverySupportNeed, desiredRecoverySupport) {
+function calculateRecoverySupportAxis(
+  recoverySupportNeed,
+  desiredRecoverySupport,
+) {
   if (recoverySupportNeed === null || desiredRecoverySupport === null) {
     return { score: null, unresolved: true };
   }
-  const score = (0.70 * recoverySupportNeed) + (0.30 * desiredRecoverySupport);
+  const score = 0.7 * recoverySupportNeed + 0.3 * desiredRecoverySupport;
   return { score: Math.round(score * 10) / 10, unresolved: false };
 }
 
@@ -361,7 +411,10 @@ function calculateTrainingAxis(trainingContributionScore) {
   }
   // Training axis is the Q4 training contribution score itself
   // (later stages may let staff "agree" an adjusted value, but this is the base calculation)
-  return { score: Math.round(trainingContributionScore * 10) / 10, unresolved: false };
+  return {
+    score: Math.round(trainingContributionScore * 10) / 10,
+    unresolved: false,
+  };
 }
 
 // Test it
@@ -378,10 +431,18 @@ function calculateFoundationScore(inputs) {
   if (inputs.q3Answer === "Very little or no structured exercise") points += 4;
   else if (inputs.q3Answer === "Some activity, but inconsistent") points += 3;
   else if (inputs.q3Answer === "1–2 times per week") points += 1;
-  else if (inputs.q3Answer === "3–4 times per week" || inputs.q3Answer === "5+ times per week") points += 0;
+  else if (
+    inputs.q3Answer === "3–4 times per week" ||
+    inputs.q3Answer === "5+ times per week"
+  )
+    points += 0;
 
   // Programming Support Need
-  if (inputs.programmingSupportNeed !== null && inputs.programmingSupportNeed >= 7) points += 2;
+  if (
+    inputs.programmingSupportNeed !== null &&
+    inputs.programmingSupportNeed >= 7
+  )
+    points += 2;
 
   // Technique Need
   if (inputs.techniqueSupportNeed !== null) {
@@ -391,7 +452,8 @@ function calculateFoundationScore(inputs) {
 
   // Goals (from Q1/Q2)
   if (inputs.goals.includes("Exercise with more confidence")) points += 3;
-  if (inputs.goals.includes("Improve my general health and fitness")) points += 2;
+  if (inputs.goals.includes("Improve my general health and fitness"))
+    points += 2;
   if (inputs.goals.includes("Return to exercise or sport")) points += 2;
 
   // Q21 flags
@@ -403,7 +465,11 @@ function calculateFoundationScore(inputs) {
 
   // Negative modifiers
   if (inputs.regularStrengthTraining) points -= 3;
-  if (inputs.performanceFocusScore !== null && inputs.performanceFocusScore >= 8) points -= 2;
+  if (
+    inputs.performanceFocusScore !== null &&
+    inputs.performanceFocusScore >= 8
+  )
+    points -= 2;
 
   // Postnatal flag
   if (inputs.postnatalReturnToExercise) points += 4;
@@ -416,13 +482,16 @@ const testInputs = {
   q3Answer: "Very little or no structured exercise",
   programmingSupportNeed: 8,
   techniqueSupportNeed: 8,
-  goals: ["Exercise with more confidence", "Improve my general health and fitness"],
+  goals: [
+    "Exercise with more confidence",
+    "Improve my general health and fitness",
+  ],
   q21_Balance: true,
   q21_Independence: false,
   q22_None: true,
   regularStrengthTraining: false,
   performanceFocusScore: 2,
-  postnatalReturnToExercise: false
+  postnatalReturnToExercise: false,
 };
 
 console.log("Foundation Score:", calculateFoundationScore(testInputs));
@@ -436,7 +505,8 @@ function calculateLiftScore(inputs) {
   if (inputs.recurrencePrevention) points += 2;
   if (inputs.goals.includes("Improve my sporting performance")) points += 3;
   if (inputs.eventOrCompetition) points += 2;
-  if (inputs.goals.includes("Improve my general health and fitness")) points += 2;
+  if (inputs.goals.includes("Improve my general health and fitness"))
+    points += 2;
   if (inputs.goals.includes("Lose weight or reduce body fat")) points += 2;
 
   if (inputs.q21_Strength) points += 4;
@@ -475,7 +545,7 @@ const liftTestInputs = {
   strengthTrainingGap: true,
   performanceFocusScore: 8,
   techniqueSupportNeed: 3,
-  preferredStyle: "STRENGTH"
+  preferredStyle: "STRENGTH",
 };
 
 console.log("Lift Score:", calculateLiftScore(liftTestInputs));
@@ -483,10 +553,12 @@ console.log("Lift Score:", calculateLiftScore(liftTestInputs));
 function calculateHybridScore(inputs) {
   let points = 0;
 
-  if (inputs.goals.includes("Improve my general health and fitness")) points += 4;
+  if (inputs.goals.includes("Improve my general health and fitness"))
+    points += 4;
   if (inputs.longevityFocus) points += 4;
   if (inputs.goals.includes("Lose weight or reduce body fat")) points += 3;
-  if (inputs.goals.includes("Improve my cardiovascular fitness or endurance")) points += 3;
+  if (inputs.goals.includes("Improve my cardiovascular fitness or endurance"))
+    points += 3;
   if (inputs.goals.includes("Get stronger or build muscle")) points += 2;
   if (inputs.goals.includes("Improve my sporting performance")) points += 2;
   if (inputs.eventOrCompetition) points += 1;
@@ -499,9 +571,17 @@ function calculateHybridScore(inputs) {
 
   if (inputs.balancedTrainingNeed) points += 3;
 
-  if (inputs.q5Answer === "1 session per week" && inputs.strengthAndCardioRelevant) points += 2;
+  if (
+    inputs.q5Answer === "1 session per week" &&
+    inputs.strengthAndCardioRelevant
+  )
+    points += 2;
 
-  if (inputs.performanceFocusScore !== null && inputs.performanceFocusScore >= 5) points += 1;
+  if (
+    inputs.performanceFocusScore !== null &&
+    inputs.performanceFocusScore >= 5
+  )
+    points += 1;
 
   if (inputs.techniqueSupportNeed !== null) {
     if (inputs.techniqueSupportNeed >= 8) points -= 2;
@@ -518,7 +598,10 @@ function calculateHybridScore(inputs) {
 
 // Test it
 const hybridTestInputs = {
-  goals: ["Improve my general health and fitness", "Improve my cardiovascular fitness or endurance"],
+  goals: [
+    "Improve my general health and fitness",
+    "Improve my cardiovascular fitness or endurance",
+  ],
   longevityFocus: true,
   eventOrCompetition: false,
   futureInjuryRisk: false,
@@ -533,7 +616,7 @@ const hybridTestInputs = {
   techniqueSupportNeed: 4,
   existingStrengthCardioGap: false,
   existingCardioStrengthGap: false,
-  preferredStyle: "MIXED"
+  preferredStyle: "MIXED",
 };
 
 console.log("Hybrid Score:", calculateHybridScore(hybridTestInputs));
@@ -543,9 +626,11 @@ function calculateHyroxScore(inputs) {
 
   if (inputs.specificHyroxGoal) points += 6;
   if (inputs.eventOrCompetition) points += 3;
-  if (inputs.goals.includes("Improve my cardiovascular fitness or endurance")) points += 4;
+  if (inputs.goals.includes("Improve my cardiovascular fitness or endurance"))
+    points += 4;
   if (inputs.goals.includes("Improve my sporting performance")) points += 3;
-  if (inputs.goals.includes("Improve my general health and fitness")) points += 3;
+  if (inputs.goals.includes("Improve my general health and fitness"))
+    points += 3;
   if (inputs.goals.includes("Lose weight or reduce body fat")) points += 2;
   if (inputs.longevityFocus) points += 2;
   if (inputs.goals.includes("Get stronger or build muscle")) points += 1;
@@ -555,8 +640,13 @@ function calculateHyroxScore(inputs) {
   if (inputs.q21_BodyComposition) points += 1;
 
   if (inputs.q3Answer === "1–2 times per week") points += 1;
-  else if (inputs.q3Answer === "3–4 times per week" || inputs.q3Answer === "5+ times per week") points += 2;
-  else if (inputs.q3Answer === "Very little or no structured exercise") points -= 3;
+  else if (
+    inputs.q3Answer === "3–4 times per week" ||
+    inputs.q3Answer === "5+ times per week"
+  )
+    points += 2;
+  else if (inputs.q3Answer === "Very little or no structured exercise")
+    points -= 3;
 
   if (inputs.techniqueSupportNeed !== null) {
     if (inputs.techniqueSupportNeed >= 8) points -= 3;
@@ -578,7 +668,10 @@ function calculateHyroxScore(inputs) {
 const hyroxTestInputs = {
   specificHyroxGoal: true,
   eventOrCompetition: true,
-  goals: ["Improve my cardiovascular fitness or endurance", "Improve my sporting performance"],
+  goals: [
+    "Improve my cardiovascular fitness or endurance",
+    "Improve my sporting performance",
+  ],
   longevityFocus: false,
   q21_Cardiovascular: true,
   q21_Independence: false,
@@ -587,7 +680,7 @@ const hyroxTestInputs = {
   techniqueSupportNeed: 3,
   performanceFocusScore: 9,
   q17SpecificallyHyrox: true,
-  preferredStyle: "CONDITIONING_HYROX"
+  preferredStyle: "CONDITIONING_HYROX",
 };
 
 console.log("HYROX Score:", calculateHyroxScore(hyroxTestInputs));
@@ -620,20 +713,28 @@ function floorScores(scores) {
     foundation: Math.max(0, scores.foundation),
     lift: Math.max(0, scores.lift),
     hybrid: Math.max(0, scores.hybrid),
-    hyrox: Math.max(0, scores.hyrox)
+    hyrox: Math.max(0, scores.hyrox),
   };
 }
 
 function determineBestMatch(scores, foundationOverrideConditions) {
   // Check Foundation Starting Override first
-  const { techniqueSupportNeed, q3Answer, foundationScore } = foundationOverrideConditions;
-  const activityIsLowOrInconsistent = (q3Answer === "Very little or no structured exercise" || q3Answer === "Some activity, but inconsistent");
+  const { techniqueSupportNeed, q3Answer, foundationScore } =
+    foundationOverrideConditions;
+  const activityIsLowOrInconsistent =
+    q3Answer === "Very little or no structured exercise" ||
+    q3Answer === "Some activity, but inconsistent";
 
-  if (techniqueSupportNeed !== null && techniqueSupportNeed >= 8 && activityIsLowOrInconsistent && foundationScore >= 10) {
+  if (
+    techniqueSupportNeed !== null &&
+    techniqueSupportNeed >= 8 &&
+    activityIsLowOrInconsistent &&
+    foundationScore >= 10
+  ) {
     return {
       bestStartingMatch: "Foundation",
       overrideApplied: true,
-      note: "Foundation Starting Override applied — highest appropriate physiological class becomes Future Match"
+      note: "Foundation Starting Override applied — highest appropriate physiological class becomes Future Match",
     };
   }
 
@@ -647,7 +748,7 @@ function determineBestMatch(scores, foundationOverrideConditions) {
       bestStartingMatch: null,
       overrideApplied: false,
       flagForDiscussion: true,
-      note: "No class reached the minimum score of 7 — flag for staff discussion"
+      note: "No class reached the minimum score of 7 — flag for staff discussion",
     };
   }
 
@@ -655,7 +756,7 @@ function determineBestMatch(scores, foundationOverrideConditions) {
     bestStartingMatch: topClass,
     topScore: topScore,
     overrideApplied: false,
-    allScores: entries
+    allScores: entries,
   };
 }
 
@@ -668,28 +769,51 @@ console.log("Scores after modifiers:", modifiedScores);
 const result = determineBestMatch(modifiedScores, {
   techniqueSupportNeed: 3,
   q3Answer: "3–4 times per week",
-  foundationScore: modifiedScores.foundation
+  foundationScore: modifiedScores.foundation,
 });
 console.log("Best Match Result:", result);
 // ===== PT / 1:1 COACHING ENGINE =====
 // PT_Need_Score = 0.35 × Programming_Support_Need + 0.35 × Technique_Support_Need + 0.20 × Accountability_Score + 0.10 × Goal_Complexity
 
-function calculateGoalComplexity(goals, hasRecurringIssue, hasReturnToSport, hasEvent, hasSportingPerformance, hasComplexPerformanceTarget) {
+function calculateGoalComplexity(
+  goals,
+  hasRecurringIssue,
+  hasReturnToSport,
+  hasEvent,
+  hasSportingPerformance,
+  hasComplexPerformanceTarget,
+) {
   // Highest applicable complexity wins
   if (hasComplexPerformanceTarget) return 10;
   if (hasSportingPerformance) return 8;
   if (hasEvent) return 6; // specific event/endurance
   if (hasReturnToSport || hasRecurringIssue) return 5;
-  if (goals.includes("Lose weight or reduce body fat") ||
-      goals.includes("Get stronger or build muscle")) return 4; // weight/strength/longevity
+  if (
+    goals.includes("Lose weight or reduce body fat") ||
+    goals.includes("Get stronger or build muscle")
+  )
+    return 4; // weight/strength/longevity
   return 2; // straightforward general fitness/maintenance
 }
 
-function calculatePTNeedScore(programmingSupportNeed, techniqueSupportNeed, accountabilityScore, goalComplexity) {
-  if (programmingSupportNeed === null || techniqueSupportNeed === null || accountabilityScore === null) {
+function calculatePTNeedScore(
+  programmingSupportNeed,
+  techniqueSupportNeed,
+  accountabilityScore,
+  goalComplexity,
+) {
+  if (
+    programmingSupportNeed === null ||
+    techniqueSupportNeed === null ||
+    accountabilityScore === null
+  ) {
     return { score: null, unresolved: true };
   }
-  const score = (0.35 * programmingSupportNeed) + (0.35 * techniqueSupportNeed) + (0.20 * accountabilityScore) + (0.10 * goalComplexity);
+  const score =
+    0.35 * programmingSupportNeed +
+    0.35 * techniqueSupportNeed +
+    0.2 * accountabilityScore +
+    0.1 * goalComplexity;
   const rounded = Math.round(score * 10) / 10;
 
   let band;
@@ -704,7 +828,11 @@ function calculatePTNeedScore(programmingSupportNeed, techniqueSupportNeed, acco
 // Test it
 const goalComplexity = calculateGoalComplexity(
   ["Improve my sporting performance"],
-  false, false, false, true, false
+  false,
+  false,
+  false,
+  true,
+  false,
 );
 console.log("Goal Complexity:", goalComplexity);
 
@@ -712,7 +840,10 @@ const ptResult = calculatePTNeedScore(8, 8, 5.3, goalComplexity);
 console.log("PT Need Result:", ptResult);
 // ===== ANCILLARY SERVICE RULES =====
 
-function determineClinicalService(clinicalSupportScore, clinicalBarrierToPrimaryGoal) {
+function determineClinicalService(
+  clinicalSupportScore,
+  clinicalBarrierToPrimaryGoal,
+) {
   if (clinicalSupportScore === null) return { level: null, unresolved: true };
 
   let level;
@@ -726,7 +857,10 @@ function determineClinicalService(clinicalSupportScore, clinicalBarrierToPrimary
   return { level, unresolved: false };
 }
 
-function determineNutritionLevel(nutritionSupportScore, isWeightBodyFatPrimaryGoal) {
+function determineNutritionLevel(
+  nutritionSupportScore,
+  isWeightBodyFatPrimaryGoal,
+) {
   if (nutritionSupportScore === null) return { level: null, unresolved: true };
 
   let level;
@@ -747,12 +881,14 @@ function determineNutritionLevel(nutritionSupportScore, isWeightBodyFatPrimaryGo
 }
 
 function determineRecoveryService(recoverySupportScore) {
-  if (recoverySupportScore === null) return { status: null, type: null, unresolved: true };
+  if (recoverySupportScore === null)
+    return { status: null, type: null, unresolved: true };
 
   let status;
   if (recoverySupportScore <= 3) status = "NO_SPECIFIC_INTERVENTION";
   else if (recoverySupportScore <= 6) status = "OCCASIONAL_ADVICE";
-  else if (recoverySupportScore <= 8) status = "REGULAR_SUPPORT_POTENTIALLY_RECOMMENDED";
+  else if (recoverySupportScore <= 8)
+    status = "REGULAR_SUPPORT_POTENTIALLY_RECOMMENDED";
   else status = "INDIVIDUAL_REVIEW";
 
   // Type is NOT auto-mapped to massage from score alone — left for staff/further logic
@@ -791,14 +927,23 @@ function determineRMRService(inputs) {
   // inputs: significantWeightBodyCompGoal, nutritionRelevance, objectiveDataInterest
   let relevanceCount = 0;
   if (inputs.significantWeightBodyCompGoal) relevanceCount++;
-  if (inputs.nutritionRelevance !== null && inputs.nutritionRelevance >= 6) relevanceCount++;
-  if (inputs.objectiveDataInterest !== null && inputs.objectiveDataInterest >= 6) relevanceCount++;
+  if (inputs.nutritionRelevance !== null && inputs.nutritionRelevance >= 6)
+    relevanceCount++;
+  if (
+    inputs.objectiveDataInterest !== null &&
+    inputs.objectiveDataInterest >= 6
+  )
+    relevanceCount++;
 
   let level;
   // High relevance requires ALL THREE together per the brief
-  if (inputs.significantWeightBodyCompGoal &&
-      inputs.nutritionRelevance !== null && inputs.nutritionRelevance >= 6 &&
-      inputs.objectiveDataInterest !== null && inputs.objectiveDataInterest >= 6) {
+  if (
+    inputs.significantWeightBodyCompGoal &&
+    inputs.nutritionRelevance !== null &&
+    inputs.nutritionRelevance >= 6 &&
+    inputs.objectiveDataInterest !== null &&
+    inputs.objectiveDataInterest >= 6
+  ) {
     level = "HIGH";
   } else if (relevanceCount >= 1) {
     level = "MODERATE";
@@ -834,24 +979,33 @@ function determineBodyCompositionService(inputs) {
 }
 
 // Test all three
-console.log("VO2/Metabolic:", determineVO2MetabolicService({
-  hasEnduranceCardioGoal: true,
-  hasEvent: true,
-  highPerformanceFocus: true,
-  highDataInterest: false,
-  hasHyroxOrEnduranceGoal: false
-}));
+console.log(
+  "VO2/Metabolic:",
+  determineVO2MetabolicService({
+    hasEnduranceCardioGoal: true,
+    hasEvent: true,
+    highPerformanceFocus: true,
+    highDataInterest: false,
+    hasHyroxOrEnduranceGoal: false,
+  }),
+);
 
-console.log("RMR:", determineRMRService({
-  significantWeightBodyCompGoal: true,
-  nutritionRelevance: 8,
-  objectiveDataInterest: 8
-}));
+console.log(
+  "RMR:",
+  determineRMRService({
+    significantWeightBodyCompGoal: true,
+    nutritionRelevance: 8,
+    objectiveDataInterest: 8,
+  }),
+);
 
-console.log("Body Composition:", determineBodyCompositionService({
-  bodyCompositionImportant: true,
-  valuesMeasurableData: true
-}));// ===== PLAN TIER ASSIGNMENT =====
+console.log(
+  "Body Composition:",
+  determineBodyCompositionService({
+    bodyCompositionImportant: true,
+    valuesMeasurableData: true,
+  }),
+); // ===== PLAN TIER ASSIGNMENT =====
 // Organizes all the services we've already determined into the four tier buckets
 
 function assignPlanTiers(services) {
@@ -860,39 +1014,67 @@ function assignPlanTiers(services) {
     essentialPrerequisite: [],
     essentialCore: [],
     recommended: [],
-    vip: []
+    vip: [],
   };
 
   // Clinical
   if (services.clinical.level === "ESSENTIAL_PREREQUISITE") {
-    tiers.essentialPrerequisite.push({ service: "Clinical/Physio Assessment", reason: "Clinical barrier to primary goal" });
+    tiers.essentialPrerequisite.push({
+      service: "Clinical/Physio Assessment",
+      reason: "Clinical barrier to primary goal",
+    });
   } else if (services.clinical.level === "RECOMMENDED") {
     tiers.recommended.push({ service: "Clinical/Physio Assessment" });
   } else if (services.clinical.level === "CONSIDER") {
-    tiers.vip.push({ service: "Clinical/Physio Assessment", type: "VIP_IF_DESIRED" });
+    tiers.vip.push({
+      service: "Clinical/Physio Assessment",
+      type: "VIP_IF_DESIRED",
+    });
   }
 
   // Nutrition
   if (services.nutrition.status === "RECOMMENDED") {
-    tiers.recommended.push({ service: `Nutrition Support (${services.nutrition.level})` });
-  } else if (services.nutrition.level === "LEVEL_3" || services.nutrition.level === "LEVEL_4") {
-    tiers.recommended.push({ service: `Nutrition Support (${services.nutrition.level})` });
-  } else if (services.nutrition.level === "LEVEL_1" || services.nutrition.level === "LEVEL_2") {
-    tiers.vip.push({ service: `Nutrition Support (${services.nutrition.level})`, type: "VIP_IF_DESIRED" });
+    tiers.recommended.push({
+      service: `Nutrition Support (${services.nutrition.level})`,
+    });
+  } else if (
+    services.nutrition.level === "LEVEL_3" ||
+    services.nutrition.level === "LEVEL_4"
+  ) {
+    tiers.recommended.push({
+      service: `Nutrition Support (${services.nutrition.level})`,
+    });
+  } else if (
+    services.nutrition.level === "LEVEL_1" ||
+    services.nutrition.level === "LEVEL_2"
+  ) {
+    tiers.vip.push({
+      service: `Nutrition Support (${services.nutrition.level})`,
+      type: "VIP_IF_DESIRED",
+    });
   }
 
   // Recovery
-  if (services.recovery.status === "INDIVIDUAL_REVIEW" || services.recovery.status === "REGULAR_SUPPORT_POTENTIALLY_RECOMMENDED") {
+  if (
+    services.recovery.status === "INDIVIDUAL_REVIEW" ||
+    services.recovery.status === "REGULAR_SUPPORT_POTENTIALLY_RECOMMENDED"
+  ) {
     tiers.recommended.push({ service: "Recovery Support" });
   } else if (services.recovery.status === "OCCASIONAL_ADVICE") {
-    tiers.vip.push({ service: "Recovery Support (occasional advice)", type: "VIP_IF_DESIRED" });
+    tiers.vip.push({
+      service: "Recovery Support (occasional advice)",
+      type: "VIP_IF_DESIRED",
+    });
   }
 
   // VO2/Metabolic
   if (services.vo2.status === "RECOMMENDED") {
     tiers.recommended.push({ service: "VO2/Metabolic Testing" });
   } else if (services.vo2.status === "IF_DESIRED") {
-    tiers.vip.push({ service: "VO2/Metabolic Testing", type: "VIP_IF_DESIRED" });
+    tiers.vip.push({
+      service: "VO2/Metabolic Testing",
+      type: "VIP_IF_DESIRED",
+    });
   }
 
   // RMR
@@ -906,7 +1088,10 @@ function assignPlanTiers(services) {
   if (services.bodyComp.status === "RECOMMENDED") {
     tiers.recommended.push({ service: "Body Composition Baseline" });
   } else if (services.bodyComp.status === "RECOMMENDED_OR_IF_DESIRED") {
-    tiers.vip.push({ service: "Body Composition Baseline", type: "VIP_IF_DESIRED" });
+    tiers.vip.push({
+      service: "Body Composition Baseline",
+      type: "VIP_IF_DESIRED",
+    });
   }
 
   return tiers;
@@ -919,7 +1104,7 @@ const allServices = {
   recovery: { status: "OCCASIONAL_ADVICE" },
   vo2: { status: "RECOMMENDED" },
   rmr: { status: "RECOMMENDED" },
-  bodyComp: { status: "RECOMMENDED" }
+  bodyComp: { status: "RECOMMENDED" },
 };
 
 const planTiers = assignPlanTiers(allServices);
@@ -927,17 +1112,62 @@ console.log("Plan Tiers:", JSON.stringify(planTiers, null, 2));
 // ===== PRICING CATALOGUE (CONFIGURABLE - EDIT PRICES HERE, NEVER IN LOGIC) =====
 
 const priceCatalogue = {
-  "bronze_membership": { name: "Bronze membership - 4 sessions/month", price: 46, billing: "RECURRING_MONTHLY" },
-  "silver_membership": { name: "Silver membership - 8 sessions/month", price: 84, billing: "RECURRING_MONTHLY" },
-  "gold_membership": { name: "Gold membership - 12 sessions/month", price: 116, billing: "RECURRING_MONTHLY" },
-  "platinum_membership": { name: "Platinum membership - 16 sessions/month", price: 137, billing: "RECURRING_MONTHLY" },
-  "unlimited_membership": { name: "Unlimited membership", price: 160, billing: "RECURRING_MONTHLY" },
-  "academy": { name: "Academy - 1 session/week", price: 46, billing: "RECURRING_MONTHLY" },
-  "initial_1to1_assessment": { name: "Initial 1:1 Coaching Assessment - 90 min", price: 99, billing: "ONE_OFF", mandatoryPrerequisite: true },
-  "coaching_1x_week": { name: "1:1 Coaching Package - 1x/week, 48 sessions/year", price: 220, billing: "RECURRING_MONTHLY" },
-  "coaching_2x_week": { name: "1:1 Coaching Package - 2x/week, 48 weeks/year", price: 440, billing: "RECURRING_MONTHLY" },
-  "payg_1to1": { name: "PAYG 1:1 Coaching - 60 min", price: 60, billing: "ONE_OFF" },
-  "pt_programme_review": { name: "1:1 PT/Coaching Programme Review - 60 min", price: 60, billing: "ONE_OFF" }
+  bronze_membership: {
+    name: "Bronze membership - 4 sessions/month",
+    price: 46,
+    billing: "RECURRING_MONTHLY",
+  },
+  silver_membership: {
+    name: "Silver membership - 8 sessions/month",
+    price: 84,
+    billing: "RECURRING_MONTHLY",
+  },
+  gold_membership: {
+    name: "Gold membership - 12 sessions/month",
+    price: 116,
+    billing: "RECURRING_MONTHLY",
+  },
+  platinum_membership: {
+    name: "Platinum membership - 16 sessions/month",
+    price: 137,
+    billing: "RECURRING_MONTHLY",
+  },
+  unlimited_membership: {
+    name: "Unlimited membership",
+    price: 160,
+    billing: "RECURRING_MONTHLY",
+  },
+  academy: {
+    name: "Academy - 1 session/week",
+    price: 46,
+    billing: "RECURRING_MONTHLY",
+  },
+  initial_1to1_assessment: {
+    name: "Initial 1:1 Coaching Assessment - 90 min",
+    price: 99,
+    billing: "ONE_OFF",
+    mandatoryPrerequisite: true,
+  },
+  coaching_1x_week: {
+    name: "1:1 Coaching Package - 1x/week, 48 sessions/year",
+    price: 220,
+    billing: "RECURRING_MONTHLY",
+  },
+  coaching_2x_week: {
+    name: "1:1 Coaching Package - 2x/week, 48 weeks/year",
+    price: 440,
+    billing: "RECURRING_MONTHLY",
+  },
+  payg_1to1: {
+    name: "PAYG 1:1 Coaching - 60 min",
+    price: 60,
+    billing: "ONE_OFF",
+  },
+  pt_programme_review: {
+    name: "1:1 PT/Coaching Programme Review - 60 min",
+    price: 60,
+    billing: "ONE_OFF",
+  },
 };
 
 // ===== PRICING FUNCTIONS =====
@@ -957,7 +1187,11 @@ function calculatePackageTotal(productIds) {
     const product = priceCatalogue[id];
     if (!product) continue;
 
-    lineItems.push({ name: product.name, price: product.price, billing: product.billing });
+    lineItems.push({
+      name: product.name,
+      price: product.price,
+      billing: product.billing,
+    });
 
     if (product.billing === "RECURRING_MONTHLY") {
       recurringMonthlyTotal += product.price;
@@ -969,12 +1203,16 @@ function calculatePackageTotal(productIds) {
   return {
     lineItems,
     recurringMonthlyTotal,
-    oneOffTotal
+    oneOffTotal,
   };
 }
 
 // Test it: a package with a membership + mandatory initial assessment + ongoing 1:1 coaching
-const testPackage = calculatePackageTotal(["gold_membership", "initial_1to1_assessment", "coaching_1x_week"]);
+const testPackage = calculatePackageTotal([
+  "gold_membership",
+  "initial_1to1_assessment",
+  "coaching_1x_week",
+]);
 console.log("Test Package:", JSON.stringify(testPackage, null, 2));
 // ===== PHASE 3: WORKED EXAMPLE A TEST =====
 // "Healthy longevity client" - capable, low support need, general health/longevity focus
@@ -987,19 +1225,43 @@ const personA = {
   q3Answer: "3–4 times per week",
   programmingSupportNeed: scoreProgrammingSupportNeed("Fairly confident"), // low need = 3
   techniqueSupportNeed: scoreTechniqueSupportNeed("Quite confident"), // low need = 3
-  consistencySupportNeed: scoreConsistencySupportNeed("Quite easy – usually consistent"), // 3
-  desiredAccountabilityLevel: scoreDesiredAccountabilityLevel("Occasional check-ins"), // 3
+  consistencySupportNeed: scoreConsistencySupportNeed(
+    "Quite easy – usually consistent",
+  ), // 3
+  desiredAccountabilityLevel: scoreDesiredAccountabilityLevel(
+    "Occasional check-ins",
+  ), // 3
   currentClinicalImpact: scoreCurrentClinicalImpact("Not at all"), // 0
   recurrenceConcern: scoreRecurrenceConcern("No"), // 0
-  goals: ["Improve my general health and fitness", "Stay fit, strong and independent as I get older"]
+  goals: [
+    "Improve my general health and fitness",
+    "Stay fit, strong and independent as I get older",
+  ],
 };
 
 // Run through Coaching + Accountability axes
-const coachA = calculateCoachingAxis(personA.programmingSupportNeed, personA.techniqueSupportNeed);
-const accA = calculateAccountabilityAxis(personA.consistencySupportNeed, personA.desiredAccountabilityLevel);
-const clinA = calculateClinicalSupportAxis(personA.currentClinicalImpact, personA.recurrenceConcern, 0);
+const coachA = calculateCoachingAxis(
+  personA.programmingSupportNeed,
+  personA.techniqueSupportNeed,
+);
+const accA = calculateAccountabilityAxis(
+  personA.consistencySupportNeed,
+  personA.desiredAccountabilityLevel,
+);
+const clinA = calculateClinicalSupportAxis(
+  personA.currentClinicalImpact,
+  personA.recurrenceConcern,
+  0,
+);
 
-console.log("Coaching:", coachA, "| Accountability:", accA, "| Clinical:", clinA);
+console.log(
+  "Coaching:",
+  coachA,
+  "| Accountability:",
+  accA,
+  "| Clinical:",
+  clinA,
+);
 
 // Class scoring
 const hybridA = calculateHybridScore({
@@ -1018,7 +1280,7 @@ const hybridA = calculateHybridScore({
   techniqueSupportNeed: 3,
   existingStrengthCardioGap: false,
   existingCardioStrengthGap: false,
-  preferredStyle: "MIXED"
+  preferredStyle: "MIXED",
 });
 
 const liftA = calculateLiftScore({
@@ -1034,92 +1296,147 @@ const liftA = calculateLiftScore({
   strengthTrainingGap: false,
   performanceFocusScore: 2,
   techniqueSupportNeed: 3,
-  preferredStyle: "MIXED"
+  preferredStyle: "MIXED",
 });
 
 console.log("Hybrid Score:", hybridA, "| Lift Score:", liftA);
-console.log("EXPECTED: Hybrid should score highest (Best: Hybrid; Complementary: Lift)");
+console.log(
+  "EXPECTED: Hybrid should score highest (Best: Hybrid; Complementary: Lift)",
+);
 
-const goalComplexA = calculateGoalComplexity(personA.goals, false, false, false, false, false);
-const ptA = calculatePTNeedScore(personA.programmingSupportNeed, personA.techniqueSupportNeed, accA.score, goalComplexA);
+const goalComplexA = calculateGoalComplexity(
+  personA.goals,
+  false,
+  false,
+  false,
+  false,
+  false,
+);
+const ptA = calculatePTNeedScore(
+  personA.programmingSupportNeed,
+  personA.techniqueSupportNeed,
+  accA.score,
+  goalComplexA,
+);
 console.log("PT Need:", ptA, "| EXPECTED: LOW band");
 
 const clinicalServiceA = determineClinicalService(clinA.score, false);
-console.log("Clinical Service:", clinicalServiceA, "| EXPECTED: NO_SERVICE or OPTIONAL (Not indicated)");
+console.log(
+  "Clinical Service:",
+  clinicalServiceA,
+  "| EXPECTED: NO_SERVICE or OPTIONAL (Not indicated)",
+);
 
 // ===== WORKED EXAMPLE B: Sedentary Longevity Beginner =====
-    // Expected: Foundation Starting Override triggers (Best Starting Match: Foundation, Future Match: Hybrid)
-    // Expected: High/very high PT need initially
+// Expected: Foundation Starting Override triggers (Best Starting Match: Foundation, Future Match: Hybrid)
+// Expected: High/very high PT need initially
 
-    console.log("\n=== WORKED EXAMPLE B: Sedentary Longevity Beginner ===");
+console.log("\n=== WORKED EXAMPLE B: Sedentary Longevity Beginner ===");
 
-    const personB = {
-      q3Answer: "Very little or no structured exercise",
-      programmingSupportNeed: scoreProgrammingSupportNeed("Not confident at all"), // 8
-      techniqueSupportNeed: scoreTechniqueSupportNeed("Not confident at all"), // 10
-      consistencySupportNeed: scoreConsistencySupportNeed("Very difficult – much more likely if someone expects me"), // 10
-      desiredAccountabilityLevel: scoreDesiredAccountabilityLevel("High level"), // 8
-      currentClinicalImpact: scoreCurrentClinicalImpact("Not at all"), // 0
-      recurrenceConcern: scoreRecurrenceConcern("No"), // 0
-      goals: ["Stay fit, strong and independent as I get older", "Exercise with more confidence"]
-    };
+const personB = {
+  q3Answer: "Very little or no structured exercise",
+  programmingSupportNeed: scoreProgrammingSupportNeed("Not confident at all"), // 8
+  techniqueSupportNeed: scoreTechniqueSupportNeed("Not confident at all"), // 10
+  consistencySupportNeed: scoreConsistencySupportNeed(
+    "Very difficult – much more likely if someone expects me",
+  ), // 10
+  desiredAccountabilityLevel: scoreDesiredAccountabilityLevel("High level"), // 8
+  currentClinicalImpact: scoreCurrentClinicalImpact("Not at all"), // 0
+  recurrenceConcern: scoreRecurrenceConcern("No"), // 0
+  goals: [
+    "Stay fit, strong and independent as I get older",
+    "Exercise with more confidence",
+  ],
+};
 
-    const accB = calculateAccountabilityAxis(personB.consistencySupportNeed, personB.desiredAccountabilityLevel);
-    console.log("Accountability Axis:", accB, "| EXPECTED: High");
+const accB = calculateAccountabilityAxis(
+  personB.consistencySupportNeed,
+  personB.desiredAccountabilityLevel,
+);
+console.log("Accountability Axis:", accB, "| EXPECTED: High");
 
-    // Foundation score - should be high given low activity + low confidence + confidence goal
-    const foundationB = calculateFoundationScore({
-      q3Answer: personB.q3Answer,
-      programmingSupportNeed: personB.programmingSupportNeed,
-      techniqueSupportNeed: personB.techniqueSupportNeed,
-      goals: personB.goals,
-      q21_Balance: true,
-      q21_Independence: true,
-      q22_None: true,
-      regularStrengthTraining: false,
-      performanceFocusScore: 0,
-      postnatalReturnToExercise: false
-    });
-    console.log("Foundation Score:", foundationB);
+// Foundation score - should be high given low activity + low confidence + confidence goal
+const foundationB = calculateFoundationScore({
+  q3Answer: personB.q3Answer,
+  programmingSupportNeed: personB.programmingSupportNeed,
+  techniqueSupportNeed: personB.techniqueSupportNeed,
+  goals: personB.goals,
+  q21_Balance: true,
+  q21_Independence: true,
+  q22_None: true,
+  regularStrengthTraining: false,
+  performanceFocusScore: 0,
+  postnatalReturnToExercise: false,
+});
+console.log("Foundation Score:", foundationB);
 
-    // Now test the override condition directly
-    const overrideCheckB = determineBestMatch(
-      { foundation: foundationB, lift: 2, hybrid: 5, hyrox: 0 },
-      {
-        techniqueSupportNeed: personB.techniqueSupportNeed,
-        q3Answer: personB.q3Answer,
-        foundationScore: foundationB
-      }
-    );
-    console.log("Best Match Result:", overrideCheckB);
-    console.log("EXPECTED: Foundation Starting Override should apply (technique >=8, low activity, foundation >=10)");
+// Now test the override condition directly
+const overrideCheckB = determineBestMatch(
+  { foundation: foundationB, lift: 2, hybrid: 5, hyrox: 0 },
+  {
+    techniqueSupportNeed: personB.techniqueSupportNeed,
+    q3Answer: personB.q3Answer,
+    foundationScore: foundationB,
+  },
+);
+console.log("Best Match Result:", overrideCheckB);
+console.log(
+  "EXPECTED: Foundation Starting Override should apply (technique >=8, low activity, foundation >=10)",
+);
 
-    // PT need check - expected HIGH/VERY HIGH
-    const goalComplexB = calculateGoalComplexity(personB.goals, false, false, false, false, false);
-    const ptB = calculatePTNeedScore(personB.programmingSupportNeed, personB.techniqueSupportNeed, accB.score, goalComplexB);
-    console.log("PT Need:", ptB, "| EXPECTED: HIGH or VERY HIGH band");
+// PT need check - expected HIGH/VERY HIGH
+const goalComplexB = calculateGoalComplexity(
+  personB.goals,
+  false,
+  false,
+  false,
+  false,
+  false,
+);
+const ptB = calculatePTNeedScore(
+  personB.programmingSupportNeed,
+  personB.techniqueSupportNeed,
+  accB.score,
+  goalComplexB,
+);
+console.log("PT Need:", ptB, "| EXPECTED: HIGH or VERY HIGH band");
 // ===== WORKED EXAMPLE D: Marathon Runner with Achilles Problem =====
 // Expected: Best class = Lift (not conditioning-focused, since cardio is already substantial)
 // Expected: Clinical = Essential_Prerequisite (Achilles is a barrier to primary goal)
 // Expected: PT = routine low
 
-console.log("\n=== WORKED EXAMPLE D: Marathon Runner with Achilles Problem ===");
+console.log(
+  "\n=== WORKED EXAMPLE D: Marathon Runner with Achilles Problem ===",
+);
 
 const personD = {
-  goals: ["Improve my sporting performance", "Prepare for a sport, event or physical challenge"],
+  goals: [
+    "Improve my sporting performance",
+    "Prepare for a sport, event or physical challenge",
+  ],
   currentClinicalImpact: scoreCurrentClinicalImpact("Significantly"), // 8
-  recurrenceConcern: scoreRecurrenceConcern("I'm concerned increasing exercise could make it worse"), // 9
+  recurrenceConcern: scoreRecurrenceConcern(
+    "I'm concerned increasing exercise could make it worse",
+  ), // 9
   performanceFocusScore: 9, // very high, marathon runner
-  q3Answer: "5+ times per week" // already training heavily (running)
+  q3Answer: "5+ times per week", // already training heavily (running)
 };
 
 // Clinical axis - should be high
-const clinD = calculateClinicalSupportAxis(personD.currentClinicalImpact, personD.recurrenceConcern, 0);
+const clinD = calculateClinicalSupportAxis(
+  personD.currentClinicalImpact,
+  personD.recurrenceConcern,
+  0,
+);
 console.log("Clinical Axis:", clinD, "| EXPECTED: High");
 
 // Clinical service - Achilles IS a barrier to primary goal (marathon performance), so ESSENTIAL_PREREQUISITE
 const clinicalServiceD = determineClinicalService(clinD.score, true); // true = clinicalBarrierToPrimaryGoal
-console.log("Clinical Service:", clinicalServiceD, "| EXPECTED: ESSENTIAL_PREREQUISITE");
+console.log(
+  "Clinical Service:",
+  clinicalServiceD,
+  "| EXPECTED: ESSENTIAL_PREREQUISITE",
+);
 
 // Lift score - should win because cardio is already substantial, strength is the gap
 const liftD = calculateLiftScore({
@@ -1135,7 +1452,7 @@ const liftD = calculateLiftScore({
   strengthTrainingGap: true, // runner likely lacks strength work
   performanceFocusScore: personD.performanceFocusScore,
   techniqueSupportNeed: 2,
-  preferredStyle: "STRENGTH"
+  preferredStyle: "STRENGTH",
 });
 
 const hyroxD = calculateHyroxScore({
@@ -1150,16 +1467,29 @@ const hyroxD = calculateHyroxScore({
   techniqueSupportNeed: 2,
   performanceFocusScore: personD.performanceFocusScore,
   q17SpecificallyHyrox: false,
-  preferredStyle: "STRENGTH"
+  preferredStyle: "STRENGTH",
 });
 
 console.log("Lift Score:", liftD, "| HYROX Score:", hyroxD);
-console.log("EXPECTED: Lift should score highest (strength gap fills the missing piece, not more conditioning)");
+console.log(
+  "EXPECTED: Lift should score highest (strength gap fills the missing piece, not more conditioning)",
+);
 
 // PT need - expected LOW despite high clinical/performance relevance
-const goalComplexD = calculateGoalComplexity(personD.goals, false, false, true, true, false);
+const goalComplexD = calculateGoalComplexity(
+  personD.goals,
+  false,
+  false,
+  true,
+  true,
+  false,
+);
 const ptD = calculatePTNeedScore(3, 2, 5, goalComplexD); // low programming/technique need - experienced runner
-console.log("PT Need:", ptD, "| EXPECTED: LOW (clinical/performance relevance doesn't force PT)");
+console.log(
+  "PT Need:",
+  ptD,
+  "| EXPECTED: LOW (clinical/performance relevance doesn't force PT)",
+);
 // ===== MASTER ORCHESTRATOR FUNCTION =====
 // Takes raw answers, runs them through the entire engine, returns the full result
 
@@ -1182,7 +1512,7 @@ function runFullAssessment(answers) {
     q17: scoreEventPerformanceRelevance(answers.q17),
     q18: scoreObjectiveDataInterest(answers.q18),
     q19: scoreRecoverySupportNeed(answers.q19),
-    q20: scoreDesiredRecoverySupport(answers.q20)
+    q20: scoreDesiredRecoverySupport(answers.q20),
   };
 
   // Step 2: Apply Q12 modifier to clinical score
@@ -1193,17 +1523,35 @@ function runFullAssessment(answers) {
     training: calculateTrainingAxis(scores.q4),
     coaching: calculateCoachingAxis(scores.q6, scores.q7),
     accountability: calculateAccountabilityAxis(scores.q8, scores.q9),
-    clinicalSupport: calculateClinicalSupportAxis(scores.q10, scores.q11, q12Result.modifier),
-    nutritionSupport: calculateNutritionSupportAxis(scores.q13, scores.q14, scores.q15),
-    performanceFocus: calculatePerformanceFocusAxis(scores.q16, scores.q17, scores.q18),
-    recoverySupport: calculateRecoverySupportAxis(scores.q19, scores.q20)
+    clinicalSupport: calculateClinicalSupportAxis(
+      scores.q10,
+      scores.q11,
+      q12Result.modifier,
+    ),
+    nutritionSupport: calculateNutritionSupportAxis(
+      scores.q13,
+      scores.q14,
+      scores.q15,
+    ),
+    performanceFocus: calculatePerformanceFocusAxis(
+      scores.q16,
+      scores.q17,
+      scores.q18,
+    ),
+    recoverySupport: calculateRecoverySupportAxis(scores.q19, scores.q20),
   };
 
   // Step 4: Ancillary services
   const services = {
-    clinical: determineClinicalService(axes.clinicalSupport.score, answers.clinicalBarrierToPrimaryGoal || false),
-    nutrition: determineNutritionLevel(axes.nutritionSupport.score, answers.isWeightBodyFatPrimaryGoal || false),
-    recovery: determineRecoveryService(axes.recoverySupport.score)
+    clinical: determineClinicalService(
+      axes.clinicalSupport.score,
+      answers.clinicalBarrierToPrimaryGoal || false,
+    ),
+    nutrition: determineNutritionLevel(
+      axes.nutritionSupport.score,
+      answers.isWeightBodyFatPrimaryGoal || false,
+    ),
+    recovery: determineRecoveryService(axes.recoverySupport.score),
   };
 
   return {
@@ -1211,18 +1559,30 @@ function runFullAssessment(answers) {
     axes: axes,
     services: services,
     engineVersion: "ONETEQ_RE_V3.0",
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 }
 
 // Quick test with Worked Example A's answers
 const fullResultA = runFullAssessment({
-  q3: "3–4 times per week", q4: "3 sessions per week", q5: "2 sessions per week",
-  q6: "Fairly confident", q7: "Quite confident", q8: "Quite easy – usually consistent",
-  q9: "Occasional check-ins", q10: "Not at all", q11: "No", q12: "Not applicable",
-  q13: "Moderately", q14: "Quite confident", q15: "Occasional guidance",
-  q16: "Slightly", q17: "No", q18: "Nice to know", q19: "Quite well – occasional issues",
-  q20: "Occasional advice/support"
+  q3: "3–4 times per week",
+  q4: "3 sessions per week",
+  q5: "2 sessions per week",
+  q6: "Fairly confident",
+  q7: "Quite confident",
+  q8: "Quite easy – usually consistent",
+  q9: "Occasional check-ins",
+  q10: "Not at all",
+  q11: "No",
+  q12: "Not applicable",
+  q13: "Moderately",
+  q14: "Quite confident",
+  q15: "Occasional guidance",
+  q16: "Slightly",
+  q17: "No",
+  q18: "Nice to know",
+  q19: "Quite well – occasional issues",
+  q20: "Occasional advice/support",
 });
 console.log("\n=== FULL ORCHESTRATOR TEST ===");
 console.log(JSON.stringify(fullResultA, null, 2));
@@ -1243,7 +1603,7 @@ function runFullAssessmentComplete(answers, flags) {
       q22_None: flags.q22_None || false,
       regularStrengthTraining: flags.regularStrengthTraining || false,
       performanceFocusScore: base.axes.performanceFocus.score,
-      postnatalReturnToExercise: flags.postnatalReturnToExercise || false
+      postnatalReturnToExercise: flags.postnatalReturnToExercise || false,
     }),
     lift: calculateLiftScore({
       goals: flags.goals,
@@ -1258,7 +1618,7 @@ function runFullAssessmentComplete(answers, flags) {
       strengthTrainingGap: flags.strengthTrainingGap || false,
       performanceFocusScore: base.axes.performanceFocus.score,
       techniqueSupportNeed: base.rawScores.q7,
-      preferredStyle: flags.preferredStyle || "NONE"
+      preferredStyle: flags.preferredStyle || "NONE",
     }),
     hybrid: calculateHybridScore({
       goals: flags.goals,
@@ -1276,7 +1636,7 @@ function runFullAssessmentComplete(answers, flags) {
       techniqueSupportNeed: base.rawScores.q7,
       existingStrengthCardioGap: flags.existingStrengthCardioGap || false,
       existingCardioStrengthGap: flags.existingCardioStrengthGap || false,
-      preferredStyle: flags.preferredStyle || "NONE"
+      preferredStyle: flags.preferredStyle || "NONE",
     }),
     hyrox: calculateHyroxScore({
       specificHyroxGoal: flags.specificHyroxGoal || false,
@@ -1290,38 +1650,72 @@ function runFullAssessmentComplete(answers, flags) {
       techniqueSupportNeed: base.rawScores.q7,
       performanceFocusScore: base.axes.performanceFocus.score,
       q17SpecificallyHyrox: flags.q17SpecificallyHyrox || false,
-      preferredStyle: flags.preferredStyle || "NONE"
-    })
+      preferredStyle: flags.preferredStyle || "NONE",
+    }),
   };
 
   const flooredScores = floorScores(classScores);
-  const modifiedScores = applyTrainingGapModifiers(flooredScores, flags.primaryTrainingGap || "NONE");
+  const modifiedScores = applyTrainingGapModifiers(
+    flooredScores,
+    flags.primaryTrainingGap || "NONE",
+  );
   const classMatch = determineBestMatch(modifiedScores, {
     techniqueSupportNeed: base.rawScores.q7,
     q3Answer: answers.q3,
-    foundationScore: modifiedScores.foundation
+    foundationScore: modifiedScores.foundation,
   });
 
   const goalComplexity = calculateGoalComplexity(
-    flags.goals, flags.hasRecurringIssue || false, flags.hasReturnToSport || false,
-    flags.hasEvent || false, flags.hasSportingPerformance || false, flags.hasComplexPerformanceTarget || false
+    flags.goals,
+    flags.hasRecurringIssue || false,
+    flags.hasReturnToSport || false,
+    flags.hasEvent || false,
+    flags.hasSportingPerformance || false,
+    flags.hasComplexPerformanceTarget || false,
   );
-  const ptNeed = calculatePTNeedScore(base.rawScores.q6, base.rawScores.q7, base.axes.accountability.score, goalComplexity);
+  const ptNeed = calculatePTNeedScore(
+    base.rawScores.q6,
+    base.rawScores.q7,
+    base.axes.accountability.score,
+    goalComplexity,
+  );
 
   return { ...base, classScores: modifiedScores, classMatch, ptNeed };
 }
 
 // Test with Worked Example A answers again, now with class flags
 const completeResultA = runFullAssessmentComplete(
-  { q3: "3–4 times per week", q4: "3 sessions per week", q5: "2 sessions per week",
-    q6: "Fairly confident", q7: "Quite confident", q8: "Quite easy – usually consistent",
-    q9: "Occasional check-ins", q10: "Not at all", q11: "No", q12: "Not applicable",
-    q13: "Moderately", q14: "Quite confident", q15: "Occasional guidance",
-    q16: "Slightly", q17: "No", q18: "Nice to know", q19: "Quite well – occasional issues",
-    q20: "Occasional advice/support" },
-  { goals: ["Improve my general health and fitness", "Stay fit, strong and independent as I get older"],
-    longevityFocus: true, q21_Cardiovascular: true, q21_Independence: true,
-    balancedTrainingNeed: true, preferredStyle: "MIXED" }
+  {
+    q3: "3–4 times per week",
+    q4: "3 sessions per week",
+    q5: "2 sessions per week",
+    q6: "Fairly confident",
+    q7: "Quite confident",
+    q8: "Quite easy – usually consistent",
+    q9: "Occasional check-ins",
+    q10: "Not at all",
+    q11: "No",
+    q12: "Not applicable",
+    q13: "Moderately",
+    q14: "Quite confident",
+    q15: "Occasional guidance",
+    q16: "Slightly",
+    q17: "No",
+    q18: "Nice to know",
+    q19: "Quite well – occasional issues",
+    q20: "Occasional advice/support",
+  },
+  {
+    goals: [
+      "Improve my general health and fitness",
+      "Stay fit, strong and independent as I get older",
+    ],
+    longevityFocus: true,
+    q21_Cardiovascular: true,
+    q21_Independence: true,
+    balancedTrainingNeed: true,
+    preferredStyle: "MIXED",
+  },
 );
 console.log("\n=== COMPLETE ORCHESTRATOR TEST ===");
 console.log("Class Match:", completeResultA.classMatch);
@@ -1332,11 +1726,17 @@ function buildRecommendedPackage(classMatch, ptNeed) {
   const productIds = [];
 
   // Map class match to a membership product (simplified mapping for now)
-  if (classMatch.bestStartingMatch === "hybrid" || classMatch.bestStartingMatch === "hyrox") {
+  if (
+    classMatch.bestStartingMatch === "hybrid" ||
+    classMatch.bestStartingMatch === "hyrox"
+  ) {
     productIds.push("gold_membership"); // 12 sessions/month as a reasonable default
   } else if (classMatch.bestStartingMatch === "lift") {
     productIds.push("silver_membership");
-  } else if (classMatch.bestStartingMatch === "Foundation" || classMatch.bestStartingMatch === "foundation") {
+  } else if (
+    classMatch.bestStartingMatch === "Foundation" ||
+    classMatch.bestStartingMatch === "foundation"
+  ) {
     productIds.push("bronze_membership");
   }
 
@@ -1355,70 +1755,266 @@ function buildRecommendedPackage(classMatch, ptNeed) {
 
 function runFullAssessmentWithPricing(answers, flags) {
   const complete = runFullAssessmentComplete(answers, flags);
-  const packageResult = buildRecommendedPackage(complete.classMatch, complete.ptNeed);
+  const packageResult = buildRecommendedPackage(
+    complete.classMatch,
+    complete.ptNeed,
+  );
 
   return { ...complete, recommendedPackage: packageResult };
 }
 
 // Final end-to-end test: Worked Example A, all the way through to price
 const finalResultA = runFullAssessmentWithPricing(
-  { q3: "3–4 times per week", q4: "3 sessions per week", q5: "2 sessions per week",
-    q6: "Fairly confident", q7: "Quite confident", q8: "Quite easy – usually consistent",
-    q9: "Occasional check-ins", q10: "Not at all", q11: "No", q12: "Not applicable",
-    q13: "Moderately", q14: "Quite confident", q15: "Occasional guidance",
-    q16: "Slightly", q17: "No", q18: "Nice to know", q19: "Quite well – occasional issues",
-    q20: "Occasional advice/support" },
-  { goals: ["Improve my general health and fitness", "Stay fit, strong and independent as I get older"],
-    longevityFocus: true, q21_Cardiovascular: true, q21_Independence: true,
-    balancedTrainingNeed: true, preferredStyle: "MIXED" }
+  {
+    q3: "3–4 times per week",
+    q4: "3 sessions per week",
+    q5: "2 sessions per week",
+    q6: "Fairly confident",
+    q7: "Quite confident",
+    q8: "Quite easy – usually consistent",
+    q9: "Occasional check-ins",
+    q10: "Not at all",
+    q11: "No",
+    q12: "Not applicable",
+    q13: "Moderately",
+    q14: "Quite confident",
+    q15: "Occasional guidance",
+    q16: "Slightly",
+    q17: "No",
+    q18: "Nice to know",
+    q19: "Quite well – occasional issues",
+    q20: "Occasional advice/support",
+  },
+  {
+    goals: [
+      "Improve my general health and fitness",
+      "Stay fit, strong and independent as I get older",
+    ],
+    longevityFocus: true,
+    q21_Cardiovascular: true,
+    q21_Independence: true,
+    balancedTrainingNeed: true,
+    preferredStyle: "MIXED",
+  },
 );
 
 console.log("\n=== FINAL END-TO-END TEST: ANSWERS -> PRICED PACKAGE ===");
 console.log("Class:", finalResultA.classMatch.bestStartingMatch);
 console.log("PT Band:", finalResultA.ptNeed.band);
-console.log("Recommended Package:", JSON.stringify(finalResultA.recommendedPackage, null, 2));
+console.log(
+  "Recommended Package:",
+  JSON.stringify(finalResultA.recommendedPackage, null, 2),
+);
 // ===== V3 PRICING CATALOGUE (EXPANDED - matches brief exactly) =====
 
 const v3Catalogue = {
   // Core memberships (30.2)
-  "bronze_membership": { name: "Bronze - 4 sessions/month", price: 46, billing: "RECURRING_MONTHLY", category: "membership", active: true },
-  "silver_membership": { name: "Silver - 8 sessions/month", price: 84, billing: "RECURRING_MONTHLY", category: "membership", active: true },
-  "gold_membership": { name: "Gold - 12 sessions/month", price: 116, billing: "RECURRING_MONTHLY", category: "membership", active: true },
-  "platinum_membership": { name: "Platinum - 16 sessions/month", price: 137, billing: "RECURRING_MONTHLY", category: "membership", active: true },
-  "unlimited_membership": { name: "Unlimited", price: 160, billing: "RECURRING_MONTHLY", category: "membership", active: true },
+  bronze_membership: {
+    name: "Bronze - 4 sessions/month",
+    price: 46,
+    billing: "RECURRING_MONTHLY",
+    category: "membership",
+    active: true,
+  },
+  silver_membership: {
+    name: "Silver - 8 sessions/month",
+    price: 84,
+    billing: "RECURRING_MONTHLY",
+    category: "membership",
+    active: true,
+  },
+  gold_membership: {
+    name: "Gold - 12 sessions/month",
+    price: 116,
+    billing: "RECURRING_MONTHLY",
+    category: "membership",
+    active: true,
+  },
+  platinum_membership: {
+    name: "Platinum - 16 sessions/month",
+    price: 137,
+    billing: "RECURRING_MONTHLY",
+    category: "membership",
+    active: true,
+  },
+  unlimited_membership: {
+    name: "Unlimited",
+    price: 160,
+    billing: "RECURRING_MONTHLY",
+    category: "membership",
+    active: true,
+  },
 
   // 1:1 Coaching (30.3)
-  "initial_assessment": { name: "Initial Assessment", price: 99, billing: "ONE_OFF", category: "coaching", active: true },
-  "coaching_technical_programming": { name: "90-min Technical + Programming", price: 90, billing: "ONE_OFF", category: "coaching", active: true },
-  "coaching_1x_week": { name: "1:1 Coaching - 1x/week", price: 220, billing: "RECURRING_MONTHLY", category: "coaching", active: true },
-  "coaching_2x_week": { name: "1:1 Coaching - 2x/week", price: 440, billing: "RECURRING_MONTHLY", category: "coaching", active: true },
-  "payg_1to1": { name: "PAYG 1:1 Coaching", price: 60, billing: "ONE_OFF", category: "coaching", active: true },
-  "programme_review": { name: "Programme Review", price: 60, billing: "ONE_OFF", category: "coaching", active: true },
+  initial_assessment: {
+    name: "Initial Assessment",
+    price: 99,
+    billing: "ONE_OFF",
+    category: "coaching",
+    active: true,
+  },
+  coaching_technical_programming: {
+    name: "90-min Technical + Programming",
+    price: 90,
+    billing: "ONE_OFF",
+    category: "coaching",
+    active: true,
+  },
+  coaching_1x_week: {
+    name: "1:1 Coaching - 1x/week",
+    price: 220,
+    billing: "RECURRING_MONTHLY",
+    category: "coaching",
+    active: true,
+  },
+  coaching_2x_week: {
+    name: "1:1 Coaching - 2x/week",
+    price: 440,
+    billing: "RECURRING_MONTHLY",
+    category: "coaching",
+    active: true,
+  },
+  payg_1to1: {
+    name: "PAYG 1:1 Coaching",
+    price: 60,
+    billing: "ONE_OFF",
+    category: "coaching",
+    active: true,
+  },
+  programme_review: {
+    name: "Programme Review",
+    price: 60,
+    billing: "ONE_OFF",
+    category: "coaching",
+    active: true,
+  },
 
   // Nutrition (30.4)
-  "nutrition_app_support": { name: "App Support", price: 25, billing: "RECURRING_MONTHLY", category: "nutrition", active: true },
-  "nutrition_essentials": { name: "Nutrition Essentials", price: 125, billing: "ONE_OFF", category: "nutrition", active: true },
-  "nutrition_transform": { name: "Nutrition Transform", price: 250, billing: "ONE_OFF", category: "nutrition", active: true },
-  "nutrition_full_platter": { name: "Nutrition Full Platter", price: 500, billing: "ONE_OFF", category: "nutrition", active: true },
-  "nutrition_followup": { name: "Nutrition Follow-up (add-on)", price: 50, billing: "ONE_OFF", category: "nutrition_addon", active: true },
-  "nutrition_family": { name: "Family Package (add-on)", price: 40, billing: "ONE_OFF", category: "nutrition_addon", active: true },
-  "nutrition_high_performance": { name: "High Performance Package (add-on)", price: 40, billing: "ONE_OFF", category: "nutrition_addon", active: true },
+  nutrition_app_support: {
+    name: "App Support",
+    price: 25,
+    billing: "RECURRING_MONTHLY",
+    category: "nutrition",
+    active: true,
+  },
+  nutrition_essentials: {
+    name: "Nutrition Essentials",
+    price: 125,
+    billing: "ONE_OFF",
+    category: "nutrition",
+    active: true,
+  },
+  nutrition_transform: {
+    name: "Nutrition Transform",
+    price: 250,
+    billing: "ONE_OFF",
+    category: "nutrition",
+    active: true,
+  },
+  nutrition_full_platter: {
+    name: "Nutrition Full Platter",
+    price: 500,
+    billing: "ONE_OFF",
+    category: "nutrition",
+    active: true,
+  },
+  nutrition_followup: {
+    name: "Nutrition Follow-up (add-on)",
+    price: 50,
+    billing: "ONE_OFF",
+    category: "nutrition_addon",
+    active: true,
+  },
+  nutrition_family: {
+    name: "Family Package (add-on)",
+    price: 40,
+    billing: "ONE_OFF",
+    category: "nutrition_addon",
+    active: true,
+  },
+  nutrition_high_performance: {
+    name: "High Performance Package (add-on)",
+    price: 40,
+    billing: "ONE_OFF",
+    category: "nutrition_addon",
+    active: true,
+  },
 
   // Physio (30.5)
-  "physio_initial": { name: "Physio Initial", price: 80, discountedPrice: 72, billing: "ONE_OFF", category: "clinical", active: true },
-  "physio_followup": { name: "Physio Follow-up", price: 63, discountedPrice: 56.70, billing: "ONE_OFF", category: "clinical", active: true },
-  "director_consultation": { name: "Director Consultation/Assessment", price: 160, billing: "ONE_OFF", category: "clinical_addon", active: true },
+  physio_initial: {
+    name: "Physio Initial",
+    price: 80,
+    discountedPrice: 72,
+    billing: "ONE_OFF",
+    category: "clinical",
+    active: true,
+  },
+  physio_followup: {
+    name: "Physio Follow-up",
+    price: 63,
+    discountedPrice: 56.7,
+    billing: "ONE_OFF",
+    category: "clinical",
+    active: true,
+  },
+  director_consultation: {
+    name: "Director Consultation/Assessment",
+    price: 160,
+    billing: "ONE_OFF",
+    category: "clinical_addon",
+    active: true,
+  },
 
   // Recovery/Testing (30.6)
-  "sports_massage": { name: "Sports Massage 45 min", price: 55, billing: "ONE_OFF", category: "recovery", active: true },
-  "vo2_metabolic": { name: "VO2/Metabolic Performance", price: 100, billing: "ONE_OFF", category: "testing", active: true },
-  "deep_dive": { name: "Deep Dive", price: 140, billing: "ONE_OFF", category: "testing", active: true },
-  "endurance_metabolic": { name: "Endurance Metabolic Performance", price: 140, billing: "ONE_OFF", category: "testing", active: true },
-  "rmr_test": { name: "RMR", price: 75, billing: "ONE_OFF", category: "testing", active: true },
-  "progress_checkin": { name: "Progress Check-in", price: 75, billing: "ONE_OFF", category: "future_optional", active: true }
+  sports_massage: {
+    name: "Sports Massage 45 min",
+    price: 55,
+    billing: "ONE_OFF",
+    category: "recovery",
+    active: true,
+  },
+  vo2_metabolic: {
+    name: "VO2/Metabolic Performance",
+    price: 100,
+    billing: "ONE_OFF",
+    category: "testing",
+    active: true,
+  },
+  deep_dive: {
+    name: "Deep Dive",
+    price: 140,
+    billing: "ONE_OFF",
+    category: "testing",
+    active: true,
+  },
+  endurance_metabolic: {
+    name: "Endurance Metabolic Performance",
+    price: 140,
+    billing: "ONE_OFF",
+    category: "testing",
+    active: true,
+  },
+  rmr_test: {
+    name: "RMR",
+    price: 75,
+    billing: "ONE_OFF",
+    category: "testing",
+    active: true,
+  },
+  progress_checkin: {
+    name: "Progress Check-in",
+    price: 75,
+    billing: "ONE_OFF",
+    category: "future_optional",
+    active: true,
+  },
 };
 
-console.log("V3 Catalogue loaded with", Object.keys(v3Catalogue).length, "products");
+console.log(
+  "V3 Catalogue loaded with",
+  Object.keys(v3Catalogue).length,
+  "products",
+);
 console.log(JSON.stringify(v3Catalogue.silver_membership, null, 2));
 // ===== 30.3: PT/COACHING PRICING BY TIER =====
 
@@ -1434,8 +2030,14 @@ function getCoachingPricing(ptBand, tier) {
     if (tier === "vip") items.push("coaching_technical_programming"); // staff-configurable base
   } else if (ptBand === "HIGH" || ptBand === "VERY HIGH") {
     if (tier === "essential") items.push("initial_assessment");
-    if (tier === "recommended") { items.push("initial_assessment"); items.push("coaching_1x_week"); }
-    if (tier === "vip") { items.push("initial_assessment"); items.push("coaching_2x_week"); }
+    if (tier === "recommended") {
+      items.push("initial_assessment");
+      items.push("coaching_1x_week");
+    }
+    if (tier === "vip") {
+      items.push("initial_assessment");
+      items.push("coaching_2x_week");
+    }
   }
 
   return items;
@@ -1444,20 +2046,43 @@ function getCoachingPricing(ptBand, tier) {
 // Test: HIGH PT need, Recommended tier - should be Initial Assessment + 1x/week
 const testItems = getCoachingPricing("HIGH", "recommended");
 console.log("HIGH/Recommended coaching items:", testItems);
-console.log("EXPECTED: initial_assessment + coaching_1x_week (per acceptance test 30.10.4)");
+console.log(
+  "EXPECTED: initial_assessment + coaching_1x_week (per acceptance test 30.10.4)",
+);
 // ===== 30.4: NUTRITION PRICING BY TIER =====
 
-function getNutritionPricing(nutritionLevel, tier, isWeightBodyFatGoal, nutritionScore) {
+function getNutritionPricing(
+  nutritionLevel,
+  tier,
+  isWeightBodyFatGoal,
+  nutritionScore,
+) {
   // nutritionLevel = "LEVEL_0" | "LEVEL_1" | "LEVEL_2" | "LEVEL_3" | "LEVEL_4"
   const items = [];
   const levelNum = parseInt(nutritionLevel.split("_")[1]);
 
   const tierMap = {
     0: { essential: null, recommended: null, vip: "nutrition_app_support" },
-    1: { essential: null, recommended: "nutrition_app_support", vip: "nutrition_essentials" },
-    2: { essential: "nutrition_app_support", recommended: "nutrition_essentials", vip: "nutrition_transform" },
-    3: { essential: "nutrition_essentials", recommended: "nutrition_transform", vip: "nutrition_full_platter" },
-    4: { essential: "nutrition_essentials", recommended: "nutrition_transform", vip: "nutrition_full_platter" }
+    1: {
+      essential: null,
+      recommended: "nutrition_app_support",
+      vip: "nutrition_essentials",
+    },
+    2: {
+      essential: "nutrition_app_support",
+      recommended: "nutrition_essentials",
+      vip: "nutrition_transform",
+    },
+    3: {
+      essential: "nutrition_essentials",
+      recommended: "nutrition_transform",
+      vip: "nutrition_full_platter",
+    },
+    4: {
+      essential: "nutrition_essentials",
+      recommended: "nutrition_transform",
+      vip: "nutrition_full_platter",
+    },
   };
 
   let product = tierMap[levelNum][tier];
@@ -1484,14 +2109,16 @@ function getPhysioPricing(productId, hasQualifyingMembershipOrCoaching) {
   const catalogueItem = v3Catalogue[productId];
   if (!catalogueItem) return null;
 
-  const price = hasQualifyingMembershipOrCoaching && catalogueItem.discountedPrice
-    ? catalogueItem.discountedPrice
-    : catalogueItem.price;
+  const price =
+    hasQualifyingMembershipOrCoaching && catalogueItem.discountedPrice
+      ? catalogueItem.discountedPrice
+      : catalogueItem.price;
 
   return {
     name: catalogueItem.name,
     price: price,
-    discountApplied: hasQualifyingMembershipOrCoaching && !!catalogueItem.discountedPrice
+    discountApplied:
+      hasQualifyingMembershipOrCoaching && !!catalogueItem.discountedPrice,
   };
 }
 
@@ -1508,10 +2135,17 @@ console.log("EXPECTED: price 80, discountApplied false");
 // Test 3: Director Consultation - must NEVER get a discount (per brief)
 const directorConsult = getPhysioPricing("director_consultation", true);
 console.log("Director Consultation (with membership):", directorConsult);
-console.log("EXPECTED: price 160, discountApplied false (no discount field exists, so this is correct)");
+console.log(
+  "EXPECTED: price 160, discountApplied false (no discount field exists, so this is correct)",
+);
 // ===== 30.6: RECOVERY/TESTING NON-STACKING RULES =====
 
-function getTestingRecommendations(vo2Status, deepDiveAppropriate, rmrStatus, recoveryStatus) {
+function getTestingRecommendations(
+  vo2Status,
+  deepDiveAppropriate,
+  rmrStatus,
+  recoveryStatus,
+) {
   const items = [];
 
   // VO2/Deep Dive: Deep Dive REPLACES VO2 when appropriate, never both
@@ -1535,24 +2169,39 @@ function getTestingRecommendations(vo2Status, deepDiveAppropriate, rmrStatus, re
 }
 
 // Test 1: Deep Dive appropriate + RMR recommended - should NOT include plain VO2
-const test1 = getTestingRecommendations("RECOMMENDED", true, "RECOMMENDED", "REGULAR_SUPPORT_POTENTIALLY_RECOMMENDED");
+const test1 = getTestingRecommendations(
+  "RECOMMENDED",
+  true,
+  "RECOMMENDED",
+  "REGULAR_SUPPORT_POTENTIALLY_RECOMMENDED",
+);
 console.log("Deep Dive + RMR test:", test1);
-console.log("EXPECTED: ['deep_dive', 'rmr_test'] - NOT vo2_metabolic (Deep Dive replaces it)");
+console.log(
+  "EXPECTED: ['deep_dive', 'rmr_test'] - NOT vo2_metabolic (Deep Dive replaces it)",
+);
 
 // Test 2: High recovery score alone (not "specifically appropriate") - should NOT auto-add massage
-const test2 = getTestingRecommendations("LOW", false, "LOW", "REGULAR_SUPPORT_POTENTIALLY_RECOMMENDED");
+const test2 = getTestingRecommendations(
+  "LOW",
+  false,
+  "LOW",
+  "REGULAR_SUPPORT_POTENTIALLY_RECOMMENDED",
+);
 console.log("High recovery score only:", test2);
-console.log("EXPECTED: [] - massage NOT auto-added just from high recovery score");
+console.log(
+  "EXPECTED: [] - massage NOT auto-added just from high recovery score",
+);
 // ===== 30.8: 3-MONTH PACKAGE TOTAL + PAYMENT SPLIT =====
 
 function calculate3MonthPackage(recurringMonthlyTotal, oneOffStartupTotal) {
-  const initial3MonthTotal = (recurringMonthlyTotal * 3) + oneOffStartupTotal;
+  const initial3MonthTotal = recurringMonthlyTotal * 3 + oneOffStartupTotal;
 
   // Split into 3 equal payments, remainder goes to payment 3
   const basePayment = Math.floor((initial3MonthTotal / 3) * 100) / 100;
   const payment1 = basePayment;
   const payment2 = basePayment;
-  const payment3 = Math.round((initial3MonthTotal - payment1 - payment2) * 100) / 100;
+  const payment3 =
+    Math.round((initial3MonthTotal - payment1 - payment2) * 100) / 100;
 
   const ongoingFromMonth4 = recurringMonthlyTotal; // one-off items never inflate this
 
@@ -1562,21 +2211,23 @@ function calculate3MonthPackage(recurringMonthlyTotal, oneOffStartupTotal) {
     payment2,
     payment3,
     checkSum: Math.round((payment1 + payment2 + payment3) * 100) / 100,
-    ongoingFromMonth4
+    ongoingFromMonth4,
   };
 }
 
 // Test: £116/month recurring (Gold) + £99 one-off (Initial Assessment) = £447 total
 const testSplit = calculate3MonthPackage(116, 99);
 console.log("3-Month Package Split:", testSplit);
-console.log("EXPECTED: total 447, payments sum to exactly 447, ongoing = 116 (not inflated by the £99)");
+console.log(
+  "EXPECTED: total 447, payments sum to exactly 447, ongoing = 116 (not inflated by the £99)",
+);
 // ===== 30.9: PRICE-AT-QUOTE HISTORY =====
 
 function createQuoteSnapshot(productIds, quoteId) {
   const snapshot = {
     quoteId: quoteId,
     createdAt: new Date().toISOString(),
-    items: []
+    items: [],
   };
 
   for (const id of productIds) {
@@ -1586,7 +2237,7 @@ function createQuoteSnapshot(productIds, quoteId) {
       productId: id,
       name: product.name,
       priceAtQuote: product.price, // FROZEN at quote time
-      billing: product.billing
+      billing: product.billing,
     });
   }
 
@@ -1594,11 +2245,20 @@ function createQuoteSnapshot(productIds, quoteId) {
 }
 
 // Test: create a quote, then simulate the catalogue price changing afterward
-const quote1 = createQuoteSnapshot(["silver_membership", "initial_assessment"], "QUOTE-001");
+const quote1 = createQuoteSnapshot(
+  ["silver_membership", "initial_assessment"],
+  "QUOTE-001",
+);
 console.log("Original Quote:", JSON.stringify(quote1, null, 2));
 
 // Now simulate an operator editing the live catalogue price
 v3Catalogue.silver_membership.price = 95; // price goes up
-console.log("\nLive catalogue price is now:", v3Catalogue.silver_membership.price);
+console.log(
+  "\nLive catalogue price is now:",
+  v3Catalogue.silver_membership.price,
+);
 console.log("But the OLD quote still shows:", quote1.items[0].priceAtQuote);
-console.log("EXPECTED: old quote price stays 84, unaffected by the catalogue change to 95");
+console.log(
+  "EXPECTED: old quote price stays 84, unaffected by the catalogue change to 95",
+);
+module.exports = { runFullAssessmentComplete };
