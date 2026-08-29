@@ -1,5 +1,7 @@
 // ONETEQ Assessment API Endpoint
-// This receives quiz answers from GHL and returns the full recommendation
+// This receives quiz answers from GHL and runs the real recommendation engine
+
+const { runFullAssessmentComplete } = require('../index.js');
 
 export default function handler(req, res) {
   if (req.method !== 'POST') {
@@ -13,17 +15,17 @@ export default function handler(req, res) {
       return res.status(400).json({ error: 'Missing answers in request body' });
     }
 
-    // TEMPORARY: placeholder response while we connect the real engine
-    // This confirms the endpoint itself works before we wire in the full logic
+    const result = runFullAssessmentComplete(answers, flags || {});
+
     return res.status(200).json({
       status: 'success',
-      message: 'ONETEQ API endpoint is live and receiving data',
-      receivedAnswers: answers,
-      engineVersion: 'ONETEQ_RE_V3.0',
-      timestamp: new Date().toISOString()
+      result: result
     });
 
   } catch (error) {
-    return res.status(500).json({ error: 'Server error', details: error.message });
+    return res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
   }
 }
