@@ -1,5 +1,12 @@
 // ONETEQ Scoring Engine — Step 1: Input Scoring
 
+// Several option labels below contain an en dash ("–"), but answers can
+// arrive with a plain hyphen ("-") instead. Normalize before comparing/
+// looking up so both forms match.
+function normalizeDashes(text) {
+  return typeof text === "string" ? text.replace(/-/g, "–") : text;
+}
+
 // This function takes the answer to Q3 and converts it to a number
 function scoreCurrentActivity(answer) {
   const scoreMap = {
@@ -9,7 +16,7 @@ function scoreCurrentActivity(answer) {
     "3–4 times per week": 3.5,
     "5+ times per week": 5,
   };
-  return scoreMap[answer];
+  return scoreMap[normalizeDashes(answer)];
 }
 
 // Test it with a sample answer
@@ -88,7 +95,7 @@ function scoreConsistencySupportNeed(answer) {
     "Very difficult – much more likely if someone expects me": 10,
     "I'm not sure": null,
   };
-  return scoreMap[answer];
+  return scoreMap[normalizeDashes(answer)];
 }
 
 // Q9: Desired Accountability → Desired Accountability Level score
@@ -178,14 +185,15 @@ console.log(
 function scoreClinicalModifier(q10Answer, q10Score, q12Answer) {
   let modifier = 0;
   let flagCurrentTreatment = false;
+  const normalizedQ12Answer = normalizeDashes(q12Answer);
 
-  if (q12Answer === "Yes – and it resolved" && q10Score === 0) {
+  if (normalizedQ12Answer === "Yes – and it resolved" && q10Score === 0) {
     modifier = -1;
-  } else if (q12Answer === "Yes – but it never completely resolved") {
+  } else if (normalizedQ12Answer === "Yes – but it never completely resolved") {
     modifier = 1;
-  } else if (q12Answer === "Yes – but it keeps recurring") {
+  } else if (normalizedQ12Answer === "Yes – but it keeps recurring") {
     modifier = 2;
-  } else if (q12Answer === "I'm currently receiving treatment") {
+  } else if (normalizedQ12Answer === "I'm currently receiving treatment") {
     flagCurrentTreatment = true; // no score change, just a flag
   }
 
@@ -244,7 +252,7 @@ function scoreEventPerformanceRelevance(answer) {
     "Yes – competition/performance is a significant priority": 10,
     Unsure: null,
   };
-  return scoreMap[answer];
+  return scoreMap[normalizeDashes(answer)];
 }
 
 // Test all three
@@ -277,7 +285,7 @@ function scoreRecoverySupportNeed(answer) {
     "Poorly – significant barrier": 10,
     Unsure: null,
   };
-  return scoreMap[answer];
+  return scoreMap[normalizeDashes(answer)];
 }
 
 // Q20: Desired Recovery Support → Desired Recovery Support score
@@ -426,15 +434,13 @@ console.log("--- ALL 7 AXIS FORMULAS COMPLETE ---");
 
 function calculateFoundationScore(inputs) {
   let points = 0;
+  const q3Answer = normalizeDashes(inputs.q3Answer);
 
   // Q3 Current activity
-  if (inputs.q3Answer === "Very little or no structured exercise") points += 4;
-  else if (inputs.q3Answer === "Some activity, but inconsistent") points += 3;
-  else if (inputs.q3Answer === "1–2 times per week") points += 1;
-  else if (
-    inputs.q3Answer === "3–4 times per week" ||
-    inputs.q3Answer === "5+ times per week"
-  )
+  if (q3Answer === "Very little or no structured exercise") points += 4;
+  else if (q3Answer === "Some activity, but inconsistent") points += 3;
+  else if (q3Answer === "1–2 times per week") points += 1;
+  else if (q3Answer === "3–4 times per week" || q3Answer === "5+ times per week")
     points += 0;
 
   // Programming Support Need
@@ -639,14 +645,11 @@ function calculateHyroxScore(inputs) {
   if (inputs.q21_Independence) points += 1;
   if (inputs.q21_BodyComposition) points += 1;
 
-  if (inputs.q3Answer === "1–2 times per week") points += 1;
-  else if (
-    inputs.q3Answer === "3–4 times per week" ||
-    inputs.q3Answer === "5+ times per week"
-  )
+  const q3Answer = normalizeDashes(inputs.q3Answer);
+  if (q3Answer === "1–2 times per week") points += 1;
+  else if (q3Answer === "3–4 times per week" || q3Answer === "5+ times per week")
     points += 2;
-  else if (inputs.q3Answer === "Very little or no structured exercise")
-    points -= 3;
+  else if (q3Answer === "Very little or no structured exercise") points -= 3;
 
   if (inputs.techniqueSupportNeed !== null) {
     if (inputs.techniqueSupportNeed >= 8) points -= 3;
