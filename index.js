@@ -2261,4 +2261,4 @@ console.log("But the OLD quote still shows:", quote1.items[0].priceAtQuote);
 console.log(
   "EXPECTED: old quote price stays 84, unaffected by the catalogue change to 95",
 );
-module.exports = { runFullAssessmentComplete };
+module.exports = { runFullAssessmentComplete, runFullAssessmentWithPricing };
