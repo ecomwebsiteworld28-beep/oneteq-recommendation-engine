@@ -1,7 +1,7 @@
 // ONETEQ Assessment API Endpoint
 // This receives quiz answers from GHL and runs the real recommendation engine
 
-const { runFullAssessmentComplete } = require('../index.js');
+const { runFullAssessmentWithPricing } = require('../index.js');
 
 export default function handler(req, res) {
   if (req.method !== 'POST') {
@@ -15,7 +15,7 @@ export default function handler(req, res) {
       return res.status(400).json({ error: 'Missing answers in request body' });
     }
 
-    const result = runFullAssessmentComplete(answers, flags || {});
+    const result = runFullAssessmentWithPricing(answers, flags || {});
 
     return res.status(200).json({
       status: 'success',
