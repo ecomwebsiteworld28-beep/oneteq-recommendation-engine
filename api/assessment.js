@@ -3,7 +3,82 @@
 
 const { runFullAssessmentWithPricing } = require('../index.js');
 
-export default function handler(req, res) {
+// GHL custom field "key" values (Settings → Custom Fields in your GHL
+// sub-account) that each piece of the result gets written to. These are
+// best guesses derived from the field names you gave me — open each field
+// in GHL and confirm/replace these with the exact key shown there before
+// relying on this in production.
+const GHL_CUSTOM_FIELD_KEYS = {
+  classMatch: 'class_match',
+  recommendedPackageSummary: 'recommended_package_summary',
+  recommendedPriceMonthly: 'recommended_price_monthly',
+  recommendedPriceOneOff: 'recommended_price_oneoff',
+  ptNeed: 'pt_need',
+  assessmentRawResponse: 'assessment_raw_response',
+};
+
+const GHL_API_BASE = 'https://services.leadconnectorhq.com';
+const GHL_API_VERSION = '2021-07-28';
+
+// GHL's webhook payload typically carries the contact id as "contact_id"
+// at the top level, alongside (not inside) "customData" — but check both
+// locations, and both naming casings, to be safe.
+function resolveContactId(req, source) {
+  return (
+    req.body.contact_id ||
+    req.body.contactId ||
+    source.contact_id ||
+    source.contactId ||
+    (req.body.contact && req.body.contact.id) ||
+    null
+  );
+}
+
+async function updateGhlContact(contactId, result) {
+  const customFields = [
+    {
+      key: GHL_CUSTOM_FIELD_KEYS.classMatch,
+      fieldValue: result.classMatch.bestStartingMatch || result.classMatch.note,
+    },
+    {
+      key: GHL_CUSTOM_FIELD_KEYS.recommendedPackageSummary,
+      fieldValue: result.recommendedPackage.lineItems.map((item) => item.name).join(', '),
+    },
+    {
+      key: GHL_CUSTOM_FIELD_KEYS.recommendedPriceMonthly,
+      fieldValue: result.recommendedPackage.recurringMonthlyTotal,
+    },
+    {
+      key: GHL_CUSTOM_FIELD_KEYS.recommendedPriceOneOff,
+      fieldValue: result.recommendedPackage.oneOffTotal,
+    },
+    {
+      key: GHL_CUSTOM_FIELD_KEYS.ptNeed,
+      fieldValue: result.ptNeed.band,
+    },
+    {
+      key: GHL_CUSTOM_FIELD_KEYS.assessmentRawResponse,
+      fieldValue: JSON.stringify(result),
+    },
+  ];
+
+  const response = await fetch(`${GHL_API_BASE}/contacts/${contactId}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${process.env.GHL_API_KEY}`,
+      Version: GHL_API_VERSION,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ customFields }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`GHL contact update failed (${response.status}): ${body}`);
+  }
+}
+
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Only POST requests are allowed' });
   }
@@ -64,6 +139,22 @@ export default function handler(req, res) {
     }
 
     const result = runFullAssessmentWithPricing(answers, flags);
+
+    // Best-effort push of the result into GHL as contact custom fields.
+    // Never let a failure here affect the scoring response GHL's Webhook
+    // step is waiting on.
+    const contactId = resolveContactId(req, source);
+    if (!contactId) {
+      console.warn('Skipping GHL contact update: no contact id found in request body');
+    } else if (!process.env.GHL_API_KEY) {
+      console.warn('Skipping GHL contact update: GHL_API_KEY is not set');
+    } else {
+      try {
+        await updateGhlContact(contactId, result);
+      } catch (ghlError) {
+        console.error('GHL contact update failed:', ghlError.message);
+      }
+    }
 
     return res.status(200).json({
       status: 'success',
