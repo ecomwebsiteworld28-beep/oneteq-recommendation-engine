@@ -1,0 +1,10 @@
+# Environment variables (contains secrets — never commit)
+.env
+.env.local
+.env.*.local
+
+# Vercel
+.vercel
+
+# Dependencies
+node_modules
