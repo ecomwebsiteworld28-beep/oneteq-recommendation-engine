@@ -9,7 +9,13 @@ export default function handler(req, res) {
   }
 
   try {
-    const { answers: nestedAnswers, flags: nestedFlags, ...rest } = req.body;
+    // GHL wraps the fields we care about inside "customData" — use that as
+    // the source when present, otherwise fall back to the raw body (covers
+    // both the old nested {answers, flags} format and a flat body sent
+    // directly, without the wrapper).
+    const source = req.body.customData || req.body;
+
+    const { answers: nestedAnswers, flags: nestedFlags, ...rest } = source;
 
     // GHL's webhook sends q3, q4, etc. flat at the top level instead of
     // nested under "answers" — fall back to collecting those if "answers"
