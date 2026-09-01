@@ -2,24 +2,14 @@
 // This receives quiz answers from GHL and runs the real recommendation engine
 
 const { runFullAssessmentWithPricing } = require('../index.js');
+const {
+  GHL_CUSTOM_FIELD_KEYS,
+  updateGhlContactCustomFields,
+} = require('../lib/ghl.js');
 
-// GHL custom field "key" values (Settings → Custom Fields in your GHL
-// sub-account) that each piece of the result gets written to. These are
-// best guesses derived from the field names you gave me — open each field
-// in GHL and confirm/replace these with the exact key shown there before
-// relying on this in production.
-const GHL_CUSTOM_FIELD_KEYS = {
-  classMatch: 'class_match',
-  recommendedPackageSummary: 'recommended_package_summary',
-  recommendedPriceMonthly: 'recommended_price_monthly',
-  recommendedPriceOneOff: 'recommended_price_oneoff',
-  ptNeedBand: 'pt_need_band',
-  ptNeedScore: 'pt_need_score',
-  assessmentRawResponse: 'assessment_raw_response',
-};
-
-const GHL_API_BASE = 'https://services.leadconnectorhq.com';
-const GHL_API_VERSION = '2021-07-28';
+// Hardcoded to match the exact URL you asked results_page_url to contain.
+// Update this if the production domain ever changes.
+const RESULTS_PAGE_BASE_URL = 'https://oneteq-recommendation-engine.vercel.app';
 
 // GHL's webhook payload typically carries the contact id as "contact_id"
 // at the top level, alongside (not inside) "customData" — but check both
@@ -65,22 +55,13 @@ async function updateGhlContact(contactId, result) {
       key: GHL_CUSTOM_FIELD_KEYS.assessmentRawResponse,
       fieldValue: JSON.stringify(result),
     },
+    {
+      key: GHL_CUSTOM_FIELD_KEYS.resultsPageUrl,
+      fieldValue: `${RESULTS_PAGE_BASE_URL}/results/${contactId}`,
+    },
   ];
 
-  const response = await fetch(`${GHL_API_BASE}/contacts/${contactId}`, {
-    method: 'PUT',
-    headers: {
-      Authorization: `Bearer ${process.env.GHL_API_KEY}`,
-      Version: GHL_API_VERSION,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ customFields }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    throw new Error(`GHL contact update failed (${response.status}): ${body}`);
-  }
+  await updateGhlContactCustomFields(contactId, customFields);
 }
 
 export default async function handler(req, res) {
