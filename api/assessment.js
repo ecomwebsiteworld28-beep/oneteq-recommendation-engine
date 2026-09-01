@@ -13,7 +13,8 @@ const GHL_CUSTOM_FIELD_KEYS = {
   recommendedPackageSummary: 'recommended_package_summary',
   recommendedPriceMonthly: 'recommended_price_monthly',
   recommendedPriceOneOff: 'recommended_price_oneoff',
-  ptNeed: 'pt_need',
+  ptNeedBand: 'pt_need_band',
+  ptNeedScore: 'pt_need_score',
   assessmentRawResponse: 'assessment_raw_response',
 };
 
@@ -53,8 +54,12 @@ async function updateGhlContact(contactId, result) {
       fieldValue: result.recommendedPackage.oneOffTotal,
     },
     {
-      key: GHL_CUSTOM_FIELD_KEYS.ptNeed,
+      key: GHL_CUSTOM_FIELD_KEYS.ptNeedBand,
       fieldValue: result.ptNeed.band,
+    },
+    {
+      key: GHL_CUSTOM_FIELD_KEYS.ptNeedScore,
+      fieldValue: result.ptNeed.score,
     },
     {
       key: GHL_CUSTOM_FIELD_KEYS.assessmentRawResponse,
