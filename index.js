@@ -7,6 +7,14 @@ function normalizeDashes(text) {
   return typeof text === "string" ? text.replace(/-/g, "–") : text;
 }
 
+// A blank/unanswered question can surface as undefined (e.g. an answer
+// string that doesn't match any option in a scoreXXX lookup) as well as
+// the explicit null used for "needs discussion" answers. Treat both as
+// unresolved everywhere downstream.
+function isUnresolved(value) {
+  return value === null || value === undefined;
+}
+
 // This function takes the answer to Q3 and converts it to a number
 function scoreCurrentActivity(answer) {
   const scoreMap = {
@@ -16,7 +24,7 @@ function scoreCurrentActivity(answer) {
     "3–4 times per week": 3.5,
     "5+ times per week": 5,
   };
-  return scoreMap[normalizeDashes(answer)];
+  return scoreMap[normalizeDashes(answer)] ?? null;
 }
 
 // Test it with a sample answer
@@ -35,7 +43,7 @@ function scoreTrainingContribution(answer) {
     "5+ sessions per week": 10,
     "I'd like advice on this": null, // NULL means "needs discussion", not zero
   };
-  return scoreMap[answer];
+  return scoreMap[answer] ?? null;
 }
 
 // Test it
@@ -53,7 +61,7 @@ function scoreONETEQFrequency(answer) {
     "4+ sessions per week": 4,
     "I'd like you to recommend this": null,
   };
-  return scoreMap[answer];
+  return scoreMap[answer] ?? null;
 }
 
 // Q6: Programming Confidence → Programming Support Need score
@@ -65,7 +73,7 @@ function scoreProgrammingSupportNeed(answer) {
     "Not confident at all": 8,
     Unsure: null,
   };
-  return scoreMap[answer];
+  return scoreMap[answer] ?? null;
 }
 
 // Q7: Technique Confidence → Technique Support Need score
@@ -78,7 +86,7 @@ function scoreTechniqueSupportNeed(answer) {
     "Not confident at all": 10,
     "It depends on the exercise / I'm unsure": null,
   };
-  return scoreMap[answer];
+  return scoreMap[answer] ?? null;
 }
 
 // Test all three
@@ -95,7 +103,7 @@ function scoreConsistencySupportNeed(answer) {
     "Very difficult – much more likely if someone expects me": 10,
     "I'm not sure": null,
   };
-  return scoreMap[normalizeDashes(answer)];
+  return scoreMap[normalizeDashes(answer)] ?? null;
 }
 
 // Q9: Desired Accountability → Desired Accountability Level score
@@ -108,7 +116,7 @@ function scoreDesiredAccountabilityLevel(answer) {
     "Very high/frequent": 10,
     "Recommend what you think would work best": null,
   };
-  return scoreMap[answer];
+  return scoreMap[answer] ?? null;
 }
 
 // Q10: Current Clinical Impact → Current Clinical Impact score
@@ -121,7 +129,7 @@ function scoreCurrentClinicalImpact(answer) {
     "Very significantly": 10,
     Unsure: null,
   };
-  return scoreMap[answer];
+  return scoreMap[answer] ?? null;
 }
 
 // Test all three
@@ -138,7 +146,7 @@ function scoreRecurrenceConcern(answer) {
     "I'm concerned increasing exercise could make it worse": 9,
     Unsure: null,
   };
-  return scoreMap[answer];
+  return scoreMap[answer] ?? null;
 }
 
 // Q13: Nutrition Importance → Nutrition Relevance score
@@ -151,7 +159,7 @@ function scoreNutritionRelevance(answer) {
     Essential: 10,
     Unsure: null,
   };
-  return scoreMap[answer];
+  return scoreMap[answer] ?? null;
 }
 
 // Q14: Nutrition Confidence → Nutrition Current Support Need score
@@ -164,7 +172,7 @@ function scoreNutritionCurrentSupportNeed(answer) {
     "Not confident at all": 10,
     Unsure: null,
   };
-  return scoreMap[answer];
+  return scoreMap[answer] ?? null;
 }
 
 // Test all three
@@ -226,7 +234,7 @@ function scoreDesiredNutritionSupport(answer) {
     "Intensive/high-touch": 10,
     "Recommend for me": null,
   };
-  return scoreMap[answer];
+  return scoreMap[answer] ?? null;
 }
 
 // Q16: Performance Importance → Performance Importance score
@@ -239,7 +247,7 @@ function scorePerformanceImportance(answer) {
     Extremely: 10,
     Unsure: null,
   };
-  return scoreMap[answer];
+  return scoreMap[answer] ?? null;
 }
 
 // Q17: Event Training → Event Performance Relevance score
@@ -252,7 +260,7 @@ function scoreEventPerformanceRelevance(answer) {
     "Yes – competition/performance is a significant priority": 10,
     Unsure: null,
   };
-  return scoreMap[normalizeDashes(answer)];
+  return scoreMap[normalizeDashes(answer)] ?? null;
 }
 
 // Test all three
@@ -272,7 +280,7 @@ function scoreObjectiveDataInterest(answer) {
     "Extremely valuable": 10,
     Unsure: null,
   };
-  return scoreMap[answer];
+  return scoreMap[answer] ?? null;
 }
 
 // Q19: Recovery Quality → Recovery Support Need score
@@ -285,7 +293,7 @@ function scoreRecoverySupportNeed(answer) {
     "Poorly – significant barrier": 10,
     Unsure: null,
   };
-  return scoreMap[normalizeDashes(answer)];
+  return scoreMap[normalizeDashes(answer)] ?? null;
 }
 
 // Q20: Desired Recovery Support → Desired Recovery Support score
@@ -297,7 +305,7 @@ function scoreDesiredRecoverySupport(answer) {
     "High level": 9,
     "Recommend for me": null,
   };
-  return scoreMap[answer];
+  return scoreMap[answer] ?? null;
 }
 
 // Test all three
@@ -313,7 +321,7 @@ console.log("--- ALL INPUT SCORING FUNCTIONS COMPLETE: Q3-Q20 ---");
 // If any input is null (unresolved), the axis is marked unresolved rather than calculated.
 
 function calculateCoachingAxis(programmingSupportNeed, techniqueSupportNeed) {
-  if (programmingSupportNeed === null || techniqueSupportNeed === null) {
+  if (isUnresolved(programmingSupportNeed) || isUnresolved(techniqueSupportNeed)) {
     return { score: null, unresolved: true };
   }
   const score = 0.55 * programmingSupportNeed + 0.45 * techniqueSupportNeed;
@@ -324,7 +332,7 @@ function calculateAccountabilityAxis(
   consistencySupportNeed,
   desiredAccountabilityLevel,
 ) {
-  if (consistencySupportNeed === null || desiredAccountabilityLevel === null) {
+  if (isUnresolved(consistencySupportNeed) || isUnresolved(desiredAccountabilityLevel)) {
     return { score: null, unresolved: true };
   }
   const score = 0.7 * consistencySupportNeed + 0.3 * desiredAccountabilityLevel;
@@ -336,7 +344,7 @@ function calculateClinicalSupportAxis(
   recurrenceConcern,
   q12Modifier,
 ) {
-  if (currentClinicalImpact === null || recurrenceConcern === null) {
+  if (isUnresolved(currentClinicalImpact) || isUnresolved(recurrenceConcern)) {
     return { score: null, unresolved: true };
   }
   let score = 0.7 * currentClinicalImpact + 0.3 * recurrenceConcern;
@@ -361,9 +369,9 @@ function calculateNutritionSupportAxis(
   desiredNutritionSupport,
 ) {
   if (
-    nutritionRelevance === null ||
-    nutritionCurrentSupportNeed === null ||
-    desiredNutritionSupport === null
+    isUnresolved(nutritionRelevance) ||
+    isUnresolved(nutritionCurrentSupportNeed) ||
+    isUnresolved(desiredNutritionSupport)
   ) {
     return { score: null, unresolved: true };
   }
@@ -380,9 +388,9 @@ function calculatePerformanceFocusAxis(
   objectiveDataInterest,
 ) {
   if (
-    performanceImportance === null ||
-    eventPerformanceRelevance === null ||
-    objectiveDataInterest === null
+    isUnresolved(performanceImportance) ||
+    isUnresolved(eventPerformanceRelevance) ||
+    isUnresolved(objectiveDataInterest)
   ) {
     return { score: null, unresolved: true };
   }
@@ -397,7 +405,7 @@ function calculateRecoverySupportAxis(
   recoverySupportNeed,
   desiredRecoverySupport,
 ) {
-  if (recoverySupportNeed === null || desiredRecoverySupport === null) {
+  if (isUnresolved(recoverySupportNeed) || isUnresolved(desiredRecoverySupport)) {
     return { score: null, unresolved: true };
   }
   const score = 0.7 * recoverySupportNeed + 0.3 * desiredRecoverySupport;
@@ -414,7 +422,7 @@ console.log("Performance Focus Axis:", performanceAxis);
 const recoveryAxis = calculateRecoverySupportAxis(5, 6); // Q19=5, Q20=6
 console.log("Recovery Support Axis:", recoveryAxis);
 function calculateTrainingAxis(trainingContributionScore) {
-  if (trainingContributionScore === null) {
+  if (isUnresolved(trainingContributionScore)) {
     return { score: null, unresolved: true };
   }
   // Training axis is the Q4 training contribution score itself
@@ -445,13 +453,13 @@ function calculateFoundationScore(inputs) {
 
   // Programming Support Need
   if (
-    inputs.programmingSupportNeed !== null &&
+    !isUnresolved(inputs.programmingSupportNeed) &&
     inputs.programmingSupportNeed >= 7
   )
     points += 2;
 
   // Technique Need
-  if (inputs.techniqueSupportNeed !== null) {
+  if (!isUnresolved(inputs.techniqueSupportNeed)) {
     if (inputs.techniqueSupportNeed >= 7) points += 4;
     else if (inputs.techniqueSupportNeed >= 5) points += 2;
   }
@@ -472,7 +480,7 @@ function calculateFoundationScore(inputs) {
   // Negative modifiers
   if (inputs.regularStrengthTraining) points -= 3;
   if (
-    inputs.performanceFocusScore !== null &&
+    !isUnresolved(inputs.performanceFocusScore) &&
     inputs.performanceFocusScore >= 8
   )
     points -= 2;
@@ -522,12 +530,12 @@ function calculateLiftScore(inputs) {
 
   if (inputs.strengthTrainingGap) points += 3;
 
-  if (inputs.performanceFocusScore !== null) {
+  if (!isUnresolved(inputs.performanceFocusScore)) {
     if (inputs.performanceFocusScore >= 8) points += 2;
     else if (inputs.performanceFocusScore >= 5) points += 1;
   }
 
-  if (inputs.techniqueSupportNeed !== null) {
+  if (!isUnresolved(inputs.techniqueSupportNeed)) {
     if (inputs.techniqueSupportNeed >= 8) points -= 2;
     else if (inputs.techniqueSupportNeed >= 5) points -= 1;
   }
@@ -584,12 +592,12 @@ function calculateHybridScore(inputs) {
     points += 2;
 
   if (
-    inputs.performanceFocusScore !== null &&
+    !isUnresolved(inputs.performanceFocusScore) &&
     inputs.performanceFocusScore >= 5
   )
     points += 1;
 
-  if (inputs.techniqueSupportNeed !== null) {
+  if (!isUnresolved(inputs.techniqueSupportNeed)) {
     if (inputs.techniqueSupportNeed >= 8) points -= 2;
     else if (inputs.techniqueSupportNeed >= 5) points -= 1;
   }
@@ -651,12 +659,12 @@ function calculateHyroxScore(inputs) {
     points += 2;
   else if (q3Answer === "Very little or no structured exercise") points -= 3;
 
-  if (inputs.techniqueSupportNeed !== null) {
+  if (!isUnresolved(inputs.techniqueSupportNeed)) {
     if (inputs.techniqueSupportNeed >= 8) points -= 3;
     else if (inputs.techniqueSupportNeed >= 5) points -= 1;
   }
 
-  if (inputs.performanceFocusScore !== null) {
+  if (!isUnresolved(inputs.performanceFocusScore)) {
     if (inputs.performanceFocusScore >= 8) points += 2;
     else if (inputs.performanceFocusScore >= 5) points += 1;
   }
@@ -729,7 +737,7 @@ function determineBestMatch(scores, foundationOverrideConditions) {
     q3Answer === "Some activity, but inconsistent";
 
   if (
-    techniqueSupportNeed !== null &&
+    !isUnresolved(techniqueSupportNeed) &&
     techniqueSupportNeed >= 8 &&
     activityIsLowOrInconsistent &&
     foundationScore >= 10
@@ -806,9 +814,9 @@ function calculatePTNeedScore(
   goalComplexity,
 ) {
   if (
-    programmingSupportNeed === null ||
-    techniqueSupportNeed === null ||
-    accountabilityScore === null
+    isUnresolved(programmingSupportNeed) ||
+    isUnresolved(techniqueSupportNeed) ||
+    isUnresolved(accountabilityScore)
   ) {
     return { score: null, unresolved: true };
   }
@@ -847,7 +855,7 @@ function determineClinicalService(
   clinicalSupportScore,
   clinicalBarrierToPrimaryGoal,
 ) {
-  if (clinicalSupportScore === null) return { level: null, unresolved: true };
+  if (isUnresolved(clinicalSupportScore)) return { level: null, unresolved: true };
 
   let level;
   if (clinicalSupportScore <= 2) level = "NO_SERVICE";
@@ -864,7 +872,7 @@ function determineNutritionLevel(
   nutritionSupportScore,
   isWeightBodyFatPrimaryGoal,
 ) {
-  if (nutritionSupportScore === null) return { level: null, unresolved: true };
+  if (isUnresolved(nutritionSupportScore)) return { level: null, unresolved: true };
 
   let level;
   if (nutritionSupportScore <= 2) level = "LEVEL_0";
@@ -884,7 +892,7 @@ function determineNutritionLevel(
 }
 
 function determineRecoveryService(recoverySupportScore) {
-  if (recoverySupportScore === null)
+  if (isUnresolved(recoverySupportScore))
     return { status: null, type: null, unresolved: true };
 
   let status;
@@ -930,10 +938,10 @@ function determineRMRService(inputs) {
   // inputs: significantWeightBodyCompGoal, nutritionRelevance, objectiveDataInterest
   let relevanceCount = 0;
   if (inputs.significantWeightBodyCompGoal) relevanceCount++;
-  if (inputs.nutritionRelevance !== null && inputs.nutritionRelevance >= 6)
+  if (!isUnresolved(inputs.nutritionRelevance) && inputs.nutritionRelevance >= 6)
     relevanceCount++;
   if (
-    inputs.objectiveDataInterest !== null &&
+    !isUnresolved(inputs.objectiveDataInterest) &&
     inputs.objectiveDataInterest >= 6
   )
     relevanceCount++;
@@ -942,9 +950,9 @@ function determineRMRService(inputs) {
   // High relevance requires ALL THREE together per the brief
   if (
     inputs.significantWeightBodyCompGoal &&
-    inputs.nutritionRelevance !== null &&
+    !isUnresolved(inputs.nutritionRelevance) &&
     inputs.nutritionRelevance >= 6 &&
-    inputs.objectiveDataInterest !== null &&
+    !isUnresolved(inputs.objectiveDataInterest) &&
     inputs.objectiveDataInterest >= 6
   ) {
     level = "HIGH";
