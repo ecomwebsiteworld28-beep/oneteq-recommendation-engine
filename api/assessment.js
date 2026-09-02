@@ -11,6 +11,14 @@ const {
 // Update this if the production domain ever changes.
 const RESULTS_PAGE_BASE_URL = 'https://oneteq-recommendation-engine.vercel.app';
 
+// A null/undefined score means "unresolved" (e.g. a blank/unanswered
+// question), not zero. Sending undefined would make JSON.stringify drop
+// the field from the request entirely, leaving whatever value GHL already
+// had in place silently stale — so always send an explicit value instead.
+function valueOrUnresolved(value, unresolvedFallback = 'Unresolved') {
+  return value === null || value === undefined ? unresolvedFallback : value;
+}
+
 // GHL's webhook payload typically carries the contact id as "contact_id"
 // at the top level, alongside (not inside) "customData" — but check both
 // locations, and both naming casings, to be safe.
@@ -44,12 +52,17 @@ async function updateGhlContact(contactId, result) {
       fieldValue: result.recommendedPackage.oneOffTotal,
     },
     {
+      // PT_Need_Band is a fixed picklist in GHL (LOW/MODERATE/HIGH/VERY
+      // HIGH, no "Unresolved" option) — sending arbitrary text risks GHL
+      // rejecting the whole update, so clear it instead when unresolved.
       key: GHL_CUSTOM_FIELD_KEYS.ptNeedBand,
-      fieldValue: result.ptNeed.band,
+      fieldValue: valueOrUnresolved(result.ptNeed.band, ''),
     },
     {
+      // PT_Need_Score is a NUMERICAL field — same risk, so clear it with
+      // null instead of writing non-numeric text into it.
       key: GHL_CUSTOM_FIELD_KEYS.ptNeedScore,
-      fieldValue: result.ptNeed.score,
+      fieldValue: valueOrUnresolved(result.ptNeed.score, null),
     },
     {
       key: GHL_CUSTOM_FIELD_KEYS.assessmentRawResponse,

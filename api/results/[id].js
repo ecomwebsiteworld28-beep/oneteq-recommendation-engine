@@ -4,7 +4,7 @@
 // simple staff/client-facing summary page.
 
 const {
-  GHL_CUSTOM_FIELD_KEYS,
+  GHL_CUSTOM_FIELD_IDS,
   getGhlContact,
   getCustomFieldValue,
 } = require('../../lib/ghl.js');
@@ -157,13 +157,13 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const rawResponse = getCustomFieldValue(contact, GHL_CUSTOM_FIELD_KEYS.assessmentRawResponse);
+  const rawResponse = getCustomFieldValue(contact, GHL_CUSTOM_FIELD_IDS.assessmentRawResponse);
 
   let result;
   try {
     result = JSON.parse(rawResponse);
   } catch (error) {
-    console.error(`Could not parse ${GHL_CUSTOM_FIELD_KEYS.assessmentRawResponse} for contact ${id}:`, error.message);
+    console.error(`Could not parse Assessment_Raw_Response for contact ${id}:`, error.message);
     res
       .status(404)
       .send(
