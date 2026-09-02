@@ -66,17 +66,25 @@ function renderRadarChart(axes) {
     { key: 'recoverySupport', label: 'Recovery' },
   ];
 
-  const size = 360;
-  const center = size / 2;
-  const maxRadius = 130;
+  // The viewBox is wider than it is tall, with extra horizontal margin,
+  // specifically so the near-horizontal axis labels (e.g. "Accountability
+  // (unresolved)") have room to render without being clipped by the SVG's
+  // edges — a plain square viewBox clips those on every axis count where
+  // a vertex lands close to the 3/9 o'clock positions, which happens with
+  // 7 axes.
+  const width = 760;
+  const height = 380;
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const maxRadius = 110;
   const maxScore = 10;
   const angleStep = (2 * Math.PI) / axisOrder.length;
 
   const pointFor = (index, radius) => {
     const angle = angleStep * index - Math.PI / 2;
     return {
-      x: center + radius * Math.cos(angle),
-      y: center + radius * Math.sin(angle),
+      x: centerX + radius * Math.cos(angle),
+      y: centerY + radius * Math.sin(angle),
     };
   };
 
@@ -95,7 +103,7 @@ function renderRadarChart(axes) {
   const spokes = axisOrder
     .map((_, i) => {
       const p = pointFor(i, maxRadius);
-      return `<line x1="${center}" y1="${center}" x2="${p.x.toFixed(1)}" y2="${p.y.toFixed(1)}" stroke="#e2e8f0" stroke-width="1" />`;
+      return `<line x1="${centerX}" y1="${centerY}" x2="${p.x.toFixed(1)}" y2="${p.y.toFixed(1)}" stroke="#e2e8f0" stroke-width="1" />`;
     })
     .join('');
 
@@ -111,16 +119,16 @@ function renderRadarChart(axes) {
 
   const labels = axisOrder
     .map((axis, i) => {
-      const p = pointFor(i, maxRadius + 32);
+      const p = pointFor(i, maxRadius + 26);
       const axisData = axes[axis.key] || {};
       const displayScore =
         typeof axisData.score === 'number' ? axisData.score : 'unresolved';
-      const anchor = Math.abs(p.x - center) < 1 ? 'middle' : p.x > center ? 'start' : 'end';
+      const anchor = Math.abs(p.x - centerX) < 1 ? 'middle' : p.x > centerX ? 'start' : 'end';
       return `<text x="${p.x.toFixed(1)}" y="${p.y.toFixed(1)}" text-anchor="${anchor}" dominant-baseline="middle" font-size="12" fill="#334155">${escapeHtml(axis.label)} (${escapeHtml(displayScore)})</text>`;
     })
     .join('');
 
-  return `<svg viewBox="0 0 ${size} ${size}" width="100%" height="auto" style="max-width: 420px; display: block; margin: 0 auto;">
+  return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="auto" style="max-width: 560px; display: block; margin: 0 auto; overflow: visible;">
     ${ringPolygons}
     ${spokes}
     <polygon points="${dataPoints}" fill="rgba(37, 99, 235, 0.35)" stroke="#2563eb" stroke-width="2" />
