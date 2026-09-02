@@ -2262,14 +2262,20 @@ const quote1 = createQuoteSnapshot(
 );
 console.log("Original Quote:", JSON.stringify(quote1, null, 2));
 
-// Now simulate an operator editing the live catalogue price
-v3Catalogue.silver_membership.price = 95; // price goes up
-console.log(
-  "\nLive catalogue price is now:",
-  v3Catalogue.silver_membership.price,
-);
+// Now simulate an operator editing the live catalogue price (on a local
+// copy — mutating v3Catalogue itself here would permanently corrupt the
+// shared catalogue for every other consumer of this module, since this
+// demo runs at module load time on every require()).
+const simulatedCatalogueEdit = { ...v3Catalogue.silver_membership, price: 95 };
+console.log("\nLive catalogue price is now:", simulatedCatalogueEdit.price);
 console.log("But the OLD quote still shows:", quote1.items[0].priceAtQuote);
 console.log(
   "EXPECTED: old quote price stays 84, unaffected by the catalogue change to 95",
 );
-module.exports = { runFullAssessmentComplete, runFullAssessmentWithPricing };
+module.exports = {
+  runFullAssessmentComplete,
+  runFullAssessmentWithPricing,
+  v3Catalogue,
+  priceCatalogue,
+  getPhysioPricing,
+};
