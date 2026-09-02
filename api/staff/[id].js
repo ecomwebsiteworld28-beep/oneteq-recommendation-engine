@@ -187,7 +187,7 @@ function renderUnlockedPage(contact, result, id) {
       ${renderCatalogueChecklist(preCheckedKeys)}
     </div>
 
-    <div style="position: sticky; bottom: 0; margin-top: 24px; padding: 16px; background: #f8fafc; border-top: 1px solid #e2e8f0; border-radius: 0 0 12px 12px;">
+    <div style="margin-top: 24px; padding: 16px; background: #f8fafc; border-top: 1px solid #e2e8f0; border-radius: 0 0 12px 12px;">
       <div style="font-size: 0.95rem;">
         <div><strong id="live-monthly-total" style="font-size: 1.2rem;">$0</strong> / month recurring</div>
         <div><strong id="live-oneoff-total" style="font-size: 1.2rem;">$0</strong> one-off</div>
