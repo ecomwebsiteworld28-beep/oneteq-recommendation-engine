@@ -4,6 +4,9 @@
 const { runFullAssessmentWithPricing } = require('../index.js');
 const {
   GHL_CUSTOM_FIELD_KEYS,
+  GHL_SURVEY_ANSWER_FIELD_IDS,
+  getGhlContact,
+  getCustomFieldValue,
   updateGhlContactCustomFields,
 } = require('../lib/ghl.js');
 
@@ -33,7 +36,76 @@ function resolveContactId(req, source) {
   );
 }
 
-async function updateGhlContact(contactId, result) {
+// A field occasionally comes back as an array even for what should be a
+// single-answer question (Q7's GHL field is misconfigured as
+// MULTIPLE_OPTIONS) — take the first value in that case rather than
+// passing the whole array through to a scoreXXX lookup, which would never
+// match an array against a string key.
+function scalarAnswer(value) {
+  if (Array.isArray(value)) {
+    if (value.length > 1) {
+      console.warn('Answer field returned multiple values, using the first:', value);
+    }
+    return value[0];
+  }
+  return value;
+}
+
+// The 18 raw survey answers (Q3-Q20) plus the two goal fields, read
+// directly off the GHL contact rather than trusted from webhook merge
+// tags — those mappings have repeatedly been wrong or duplicated. A field
+// that's genuinely blank on the contact comes back as undefined here,
+// which flows straight through to answers.qN — the existing scoreXXX/
+// isUnresolved handling in index.js already treats that as unresolved
+// rather than guessing a score, so no special-casing is needed for it.
+function buildAnswersAndGoalFields(contact) {
+  const answers = {};
+  for (let q = 3; q <= 20; q++) {
+    const fieldId = GHL_SURVEY_ANSWER_FIELD_IDS[`q${q}`];
+    answers[`q${q}`] = scalarAnswer(getCustomFieldValue(contact, fieldId));
+  }
+
+  const q1Goal = scalarAnswer(getCustomFieldValue(contact, GHL_SURVEY_ANSWER_FIELD_IDS.q1Goal));
+  const q2Goals = getCustomFieldValue(contact, GHL_SURVEY_ANSWER_FIELD_IDS.q2Goals);
+
+  return { answers, q1Goal, q2Goals };
+}
+
+// flags.goals needs to be an array. Q1_Main_Goal is a single string;
+// Q2_Other_Goals is a genuine multi-select field in GHL and comes back as
+// an array already, but handle a comma-separated string too in case that
+// ever changes.
+function buildGoals(q1Goal, q2Goals) {
+  const goals = [];
+  const seen = new Set();
+  const addGoal = (goal) => {
+    if (typeof goal !== 'string') return;
+    const trimmed = goal.trim();
+    if (trimmed && !seen.has(trimmed)) {
+      seen.add(trimmed);
+      goals.push(trimmed);
+    }
+  };
+
+  addGoal(q1Goal);
+
+  if (Array.isArray(q2Goals)) {
+    q2Goals.forEach(addGoal);
+  } else if (typeof q2Goals === 'string' && q2Goals.trim()) {
+    q2Goals.split(',').forEach(addGoal);
+  }
+
+  return goals;
+}
+
+async function updateGhlContact(contactId, result, answers) {
+  // Include the raw answer inputs alongside the scored output, so
+  // Assessment_Raw_Response shows what came in as well as what was
+  // scored from it — useful for debugging a wrong-looking result without
+  // having to separately go find what the contact's answers were at the
+  // time.
+  const debugSnapshot = { ...result, rawAnswers: answers };
+
   const customFields = [
     {
       key: GHL_CUSTOM_FIELD_KEYS.classMatch,
@@ -66,7 +138,7 @@ async function updateGhlContact(contactId, result) {
     },
     {
       key: GHL_CUSTOM_FIELD_KEYS.assessmentRawResponse,
-      fieldValue: JSON.stringify(result),
+      fieldValue: JSON.stringify(debugSnapshot),
     },
     {
       key: GHL_CUSTOM_FIELD_KEYS.resultsPageUrl,
@@ -84,57 +156,49 @@ export default async function handler(req, res) {
 
   try {
     // GHL wraps the fields we care about inside "customData" — use that as
-    // the source when present, otherwise fall back to the raw body (covers
-    // both the old nested {answers, flags} format and a flat body sent
-    // directly, without the wrapper).
+    // the source when present, otherwise fall back to the raw body.
     const source = req.body.customData || req.body;
 
-    const { answers: nestedAnswers, flags: nestedFlags, ...rest } = source;
-
-    // GHL's webhook sends q3, q4, etc. flat at the top level instead of
-    // nested under "answers" — fall back to collecting those if "answers"
-    // wasn't provided.
-    let answers = nestedAnswers;
-    if (!answers) {
-      answers = {};
-      for (const [key, value] of Object.entries(rest)) {
-        if (/^q\d+$/i.test(key)) {
-          answers[key] = value;
-        }
-      }
+    const contactId = resolveContactId(req, source);
+    if (!contactId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Missing contact_id — cannot fetch survey answers without it.',
+      });
     }
 
-    if (!answers || Object.keys(answers).length === 0) {
-      return res.status(400).json({ error: 'Missing answers in request body' });
+    // Survey answers are now always read from the GHL contact itself, not
+    // from the webhook payload — the merge-tag field mappings in the
+    // workflow have repeatedly been wrong or duplicated, but the contact
+    // record is always correct. A failure here means there's nothing
+    // reliable to score, so it's a hard error rather than falling back to
+    // scoring with empty answers.
+    let contact;
+    try {
+      contact = await getGhlContact(contactId);
+    } catch (error) {
+      console.error('Failed to fetch GHL contact for scoring:', error.message);
+      return res.status(502).json({
+        status: 'error',
+        message: 'Could not fetch this contact from GHL, so the assessment cannot be scored.',
+      });
     }
 
-    let flags = nestedFlags || {};
+    if (!contact) {
+      return res.status(404).json({
+        status: 'error',
+        message: `No GHL contact found for contact_id ${contactId}.`,
+      });
+    }
 
-    // GHL can't send flags.goals as an array — it sends the main goal as
-    // "q1_goal" and any extra goals as a comma-separated "q2_goals" string
-    // (sometimes already an array) at the top level. Build flags.goals from
-    // those when it wasn't already given as an array.
+    const { answers, q1Goal, q2Goals } = buildAnswersAndGoalFields(contact);
+
+    // Flags (Q21/Q22 selections, longevityFocus, preferredStyle, etc.)
+    // still come from the webhook body — only the raw Q3-Q20 + goal
+    // answers moved to being read from the contact.
+    let flags = source.flags || {};
     if (!Array.isArray(flags.goals)) {
-      const goals = [];
-      const seen = new Set();
-      const addGoal = (goal) => {
-        if (typeof goal !== 'string') return;
-        const trimmed = goal.trim();
-        if (trimmed && !seen.has(trimmed)) {
-          seen.add(trimmed);
-          goals.push(trimmed);
-        }
-      };
-
-      addGoal(rest.q1_goal);
-
-      if (Array.isArray(rest.q2_goals)) {
-        rest.q2_goals.forEach(addGoal);
-      } else if (typeof rest.q2_goals === 'string' && rest.q2_goals.trim()) {
-        rest.q2_goals.split(',').forEach(addGoal);
-      }
-
-      flags = { ...flags, goals };
+      flags = { ...flags, goals: buildGoals(q1Goal, q2Goals) };
     }
 
     const result = runFullAssessmentWithPricing(answers, flags);
@@ -142,14 +206,11 @@ export default async function handler(req, res) {
     // Best-effort push of the result into GHL as contact custom fields.
     // Never let a failure here affect the scoring response GHL's Webhook
     // step is waiting on.
-    const contactId = resolveContactId(req, source);
-    if (!contactId) {
-      console.warn('Skipping GHL contact update: no contact id found in request body');
-    } else if (!process.env.GHL_API_KEY) {
+    if (!process.env.GHL_API_KEY) {
       console.warn('Skipping GHL contact update: GHL_API_KEY is not set');
     } else {
       try {
-        await updateGhlContact(contactId, result);
+        await updateGhlContact(contactId, result, answers);
       } catch (ghlError) {
         console.error('GHL contact update failed:', ghlError.message);
       }
