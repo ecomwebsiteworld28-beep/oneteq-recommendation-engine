@@ -1,14 +1,49 @@
 // ONETEQ Scoring Engine — Step 1: Input Scoring
 
-// Answers can arrive with formatting quirks that shouldn't cause a valid
-// answer to be treated as unmatched: a plain hyphen ("-") instead of the
-// en dash ("–") used in some option labels, and/or stray leading/trailing
-// or doubled-up internal whitespace (a real submission has arrived as
-// "Very significantly " with a trailing space). Normalize both before any
-// comparison or lookup, everywhere an answer string is matched.
+// Answers can arrive with stray leading/trailing or doubled-up internal
+// whitespace (a real submission has arrived as "Very significantly " with
+// a trailing space). Trim and collapse that before any comparison or
+// lookup, everywhere an answer string is matched.
 function normalizeAnswer(text) {
   if (typeof text !== "string") return text;
-  return text.replace(/-/g, "–").trim().replace(/\s+/g, " ");
+  return text.trim().replace(/\s+/g, " ");
+}
+
+// Some option labels use an en dash ("–") as a punctuation separator (e.g.
+// "Very easy – highly consistent"), and an answer can arrive with a plain
+// hyphen ("-") there instead. But other option labels have a *literal*
+// hyphen as part of a real word — "Occasional check-ins",
+// "Intensive/high-touch" — where converting "-" to "–" is wrong and
+// corrupts an otherwise-correct answer into one that matches nothing.
+// There's no reliable way to tell these apart from the character alone,
+// so always try the answer exactly as given (after whitespace
+// normalization) first, and only fall back to converting "-" to "–" if
+// that didn't match anything.
+function dashConvert(text) {
+  return typeof text === "string" ? text.replace(/-/g, "–") : text;
+}
+
+function lookupAnswer(scoreMap, rawAnswer) {
+  const answer = normalizeAnswer(rawAnswer);
+  if (typeof answer !== "string") return undefined;
+  if (Object.prototype.hasOwnProperty.call(scoreMap, answer)) {
+    return scoreMap[answer];
+  }
+  return scoreMap[dashConvert(answer)];
+}
+
+// Same fallback order as lookupAnswer, but for a chain of === comparisons
+// against a fixed list of literal option strings rather than an object
+// lookup — returns whichever form (as-typed, or dash-converted) actually
+// matches one of validOptions, so the caller's existing === chain just
+// works unchanged.
+function resolveAnswerForComparison(rawAnswer, validOptions) {
+  const answer = normalizeAnswer(rawAnswer);
+  if (typeof answer !== "string") return answer;
+  if (validOptions.includes(answer)) return answer;
+  const converted = dashConvert(answer);
+  if (validOptions.includes(converted)) return converted;
+  return answer;
 }
 
 // A blank/unanswered question can surface as undefined (e.g. an answer
@@ -28,7 +63,7 @@ function scoreCurrentActivity(answer) {
     "3–4 times per week": 3.5,
     "5+ times per week": 5,
   };
-  return scoreMap[normalizeAnswer(answer)] ?? null;
+  return lookupAnswer(scoreMap, answer) ?? null;
 }
 
 // Test it with a sample answer
@@ -47,7 +82,7 @@ function scoreTrainingContribution(answer) {
     "5+ sessions per week": 10,
     "I'd like advice on this": null, // NULL means "needs discussion", not zero
   };
-  return scoreMap[normalizeAnswer(answer)] ?? null;
+  return lookupAnswer(scoreMap, answer) ?? null;
 }
 
 // Test it
@@ -65,7 +100,7 @@ function scoreONETEQFrequency(answer) {
     "4+ sessions per week": 4,
     "I'd like you to recommend this": null,
   };
-  return scoreMap[normalizeAnswer(answer)] ?? null;
+  return lookupAnswer(scoreMap, answer) ?? null;
 }
 
 // Q6: Programming Confidence → Programming Support Need score
@@ -77,7 +112,7 @@ function scoreProgrammingSupportNeed(answer) {
     "Not confident at all": 8,
     Unsure: null,
   };
-  return scoreMap[normalizeAnswer(answer)] ?? null;
+  return lookupAnswer(scoreMap, answer) ?? null;
 }
 
 // Q7: Technique Confidence → Technique Support Need score
@@ -90,7 +125,7 @@ function scoreTechniqueSupportNeed(answer) {
     "Not confident at all": 10,
     "It depends on the exercise / I'm unsure": null,
   };
-  return scoreMap[normalizeAnswer(answer)] ?? null;
+  return lookupAnswer(scoreMap, answer) ?? null;
 }
 
 // Test all three
@@ -107,7 +142,7 @@ function scoreConsistencySupportNeed(answer) {
     "Very difficult – much more likely if someone expects me": 10,
     "I'm not sure": null,
   };
-  return scoreMap[normalizeAnswer(answer)] ?? null;
+  return lookupAnswer(scoreMap, answer) ?? null;
 }
 
 // Q9: Desired Accountability → Desired Accountability Level score
@@ -120,7 +155,7 @@ function scoreDesiredAccountabilityLevel(answer) {
     "Very high/frequent": 10,
     "Recommend what you think would work best": null,
   };
-  return scoreMap[normalizeAnswer(answer)] ?? null;
+  return lookupAnswer(scoreMap, answer) ?? null;
 }
 
 // Q10: Current Clinical Impact → Current Clinical Impact score
@@ -133,7 +168,7 @@ function scoreCurrentClinicalImpact(answer) {
     "Very significantly": 10,
     Unsure: null,
   };
-  return scoreMap[normalizeAnswer(answer)] ?? null;
+  return lookupAnswer(scoreMap, answer) ?? null;
 }
 
 // Test all three
@@ -150,7 +185,7 @@ function scoreRecurrenceConcern(answer) {
     "I'm concerned increasing exercise could make it worse": 9,
     Unsure: null,
   };
-  return scoreMap[normalizeAnswer(answer)] ?? null;
+  return lookupAnswer(scoreMap, answer) ?? null;
 }
 
 // Q13: Nutrition Importance → Nutrition Relevance score
@@ -163,7 +198,7 @@ function scoreNutritionRelevance(answer) {
     Essential: 10,
     Unsure: null,
   };
-  return scoreMap[normalizeAnswer(answer)] ?? null;
+  return lookupAnswer(scoreMap, answer) ?? null;
 }
 
 // Q14: Nutrition Confidence → Nutrition Current Support Need score
@@ -176,7 +211,7 @@ function scoreNutritionCurrentSupportNeed(answer) {
     "Not confident at all": 10,
     Unsure: null,
   };
-  return scoreMap[normalizeAnswer(answer)] ?? null;
+  return lookupAnswer(scoreMap, answer) ?? null;
 }
 
 // Test all three
@@ -197,7 +232,12 @@ console.log(
 function scoreClinicalModifier(q10Answer, q10Score, q12Answer) {
   let modifier = 0;
   let flagCurrentTreatment = false;
-  const normalizedQ12Answer = normalizeAnswer(q12Answer);
+  const normalizedQ12Answer = resolveAnswerForComparison(q12Answer, [
+    "Yes – and it resolved",
+    "Yes – but it never completely resolved",
+    "Yes – but it keeps recurring",
+    "I'm currently receiving treatment",
+  ]);
 
   if (normalizedQ12Answer === "Yes – and it resolved" && q10Score === 0) {
     modifier = -1;
@@ -238,7 +278,7 @@ function scoreDesiredNutritionSupport(answer) {
     "Intensive/high-touch": 10,
     "Recommend for me": null,
   };
-  return scoreMap[normalizeAnswer(answer)] ?? null;
+  return lookupAnswer(scoreMap, answer) ?? null;
 }
 
 // Q16: Performance Importance → Performance Importance score
@@ -251,7 +291,7 @@ function scorePerformanceImportance(answer) {
     Extremely: 10,
     Unsure: null,
   };
-  return scoreMap[normalizeAnswer(answer)] ?? null;
+  return lookupAnswer(scoreMap, answer) ?? null;
 }
 
 // Q17: Event Training → Event Performance Relevance score
@@ -264,7 +304,7 @@ function scoreEventPerformanceRelevance(answer) {
     "Yes – competition/performance is a significant priority": 10,
     Unsure: null,
   };
-  return scoreMap[normalizeAnswer(answer)] ?? null;
+  return lookupAnswer(scoreMap, answer) ?? null;
 }
 
 // Test all three
@@ -284,7 +324,7 @@ function scoreObjectiveDataInterest(answer) {
     "Extremely valuable": 10,
     Unsure: null,
   };
-  return scoreMap[normalizeAnswer(answer)] ?? null;
+  return lookupAnswer(scoreMap, answer) ?? null;
 }
 
 // Q19: Recovery Quality → Recovery Support Need score
@@ -297,7 +337,7 @@ function scoreRecoverySupportNeed(answer) {
     "Poorly – significant barrier": 10,
     Unsure: null,
   };
-  return scoreMap[normalizeAnswer(answer)] ?? null;
+  return lookupAnswer(scoreMap, answer) ?? null;
 }
 
 // Q20: Desired Recovery Support → Desired Recovery Support score
@@ -309,7 +349,7 @@ function scoreDesiredRecoverySupport(answer) {
     "High level": 9,
     "Recommend for me": null,
   };
-  return scoreMap[normalizeAnswer(answer)] ?? null;
+  return lookupAnswer(scoreMap, answer) ?? null;
 }
 
 // Test all three
@@ -446,7 +486,13 @@ console.log("--- ALL 7 AXIS FORMULAS COMPLETE ---");
 
 function calculateFoundationScore(inputs) {
   let points = 0;
-  const q3Answer = normalizeAnswer(inputs.q3Answer);
+  const q3Answer = resolveAnswerForComparison(inputs.q3Answer, [
+    "Very little or no structured exercise",
+    "Some activity, but inconsistent",
+    "1–2 times per week",
+    "3–4 times per week",
+    "5+ times per week",
+  ]);
 
   // Q3 Current activity
   if (q3Answer === "Very little or no structured exercise") points += 4;
@@ -657,7 +703,13 @@ function calculateHyroxScore(inputs) {
   if (inputs.q21_Independence) points += 1;
   if (inputs.q21_BodyComposition) points += 1;
 
-  const q3Answer = normalizeAnswer(inputs.q3Answer);
+  const q3Answer = resolveAnswerForComparison(inputs.q3Answer, [
+    "Very little or no structured exercise",
+    "Some activity, but inconsistent",
+    "1–2 times per week",
+    "3–4 times per week",
+    "5+ times per week",
+  ]);
   if (q3Answer === "1–2 times per week") points += 1;
   else if (q3Answer === "3–4 times per week" || q3Answer === "5+ times per week")
     points += 2;
