@@ -784,10 +784,46 @@ function floorScores(scores) {
   };
 }
 
+// Client-requested change to class-match selection, deliberately
+// superseding brief section 11's "if no class reaches 7, flag for staff
+// discussion": 7 is now a confidence threshold for how a match is
+// *labelled* (matchType), not a minimum score required to return one at
+// all. The highest-scoring eligible class is always returned as either a
+// STRONG_MATCH (>=7) or a BEST_STARTING_MATCH (<7) — nothing scoring
+// below 7 is a reason on its own to withhold a recommendation or flag for
+// discussion anymore.
+
+// "Effectively tied" for the Foundation tie-break below: within this many
+// points of the top score. Class scores move in small increments (often
+// 1-4 points per criterion), so a 1-point margin is a tight, conservative
+// definition of "no real separation" without starting to override
+// clearly-differentiated results.
+const FOUNDATION_TIE_TOLERANCE = 1;
+
+// "Low confidence" for the same tie-break: reuses the >=5 threshold
+// already used as the "moderate need" tier for techniqueSupportNeed in
+// calculateLiftScore/calculateHybridScore/calculateHyroxScore (Foundation
+// itself uses a >=7 threshold, but that's specific to Foundation's own
+// bonus calculation, not a general confidence line) - the more inclusive
+// >=5 threshold errs toward prioritising the safer Foundation class
+// whenever confidence is genuinely in question, not only when it's very
+// low.
+const LOW_CONFIDENCE_THRESHOLD = 5;
+
+function isLowConfidence(programmingSupportNeed, techniqueSupportNeed) {
+  return (
+    (!isUnresolved(programmingSupportNeed) && programmingSupportNeed >= LOW_CONFIDENCE_THRESHOLD) ||
+    (!isUnresolved(techniqueSupportNeed) && techniqueSupportNeed >= LOW_CONFIDENCE_THRESHOLD)
+  );
+}
+
 function determineBestMatch(scores, foundationOverrideConditions) {
-  // Check Foundation Starting Override first
+  // Check Foundation Starting Override first — unchanged, and still takes
+  // priority over everything below (hard eligibility/safety rules always
+  // win over the tie-break and the confidence labelling).
   const {
     techniqueSupportNeed,
+    programmingSupportNeed,
     q3Answer: rawQ3Answer,
     foundationScore,
   } = foundationOverrideConditions;
@@ -803,8 +839,10 @@ function determineBestMatch(scores, foundationOverrideConditions) {
     foundationScore >= 10
   ) {
     return {
-      bestStartingMatch: "Foundation",
+      bestStartingMatch: "foundation",
+      matchType: "BEST_STARTING_MATCH",
       overrideApplied: true,
+      flagForDiscussion: false,
       note: "Foundation Starting Override applied — highest appropriate physiological class becomes Future Match",
     };
   }
@@ -814,19 +852,43 @@ function determineBestMatch(scores, foundationOverrideConditions) {
   entries.sort((a, b) => b[1] - a[1]); // sort descending by score
   const [topClass, topScore] = entries[0];
 
-  if (topScore < 7) {
-    return {
-      bestStartingMatch: null,
-      overrideApplied: false,
-      flagForDiscussion: true,
-      note: "No class reached the minimum score of 7 — flag for staff discussion",
-    };
+  // Tie-break: if Foundation is tied or effectively tied with whichever
+  // of Lift/Hybrid is currently leading, and training (Q6) or technique
+  // (Q7) confidence is low, prioritise Foundation over the raw score
+  // order. Hyrox is deliberately excluded from this rule. This can only
+  // change the outcome when Lift/Hybrid is strictly ahead of Foundation
+  // by no more than the tie tolerance — on an exact tie, Object.entries'
+  // insertion order (foundation, lift, hybrid, hyrox) plus a stable sort
+  // already keeps Foundation first.
+  let winnerClass = topClass;
+  if (
+    (topClass === "lift" || topClass === "hybrid") &&
+    topScore - scores.foundation <= FOUNDATION_TIE_TOLERANCE &&
+    isLowConfidence(programmingSupportNeed, techniqueSupportNeed)
+  ) {
+    winnerClass = "foundation";
   }
+  const winnerScore = scores[winnerClass];
+
+  const matchType = winnerScore >= 7 ? "STRONG_MATCH" : "BEST_STARTING_MATCH";
+
+  // flagForDiscussion is now reserved for a genuine unresolved input (we
+  // can't reliably evaluate the safety override or tie-break above
+  // without Q6/Q7) or a real appropriateness problem (the top score is 0
+  // — no class showed any positive signal at all) — not merely for
+  // landing below the old 7-point threshold, which is now just a
+  // confidence label.
+  const flagForDiscussion =
+    isUnresolved(programmingSupportNeed) ||
+    isUnresolved(techniqueSupportNeed) ||
+    topScore <= 0;
 
   return {
-    bestStartingMatch: topClass,
-    topScore: topScore,
+    bestStartingMatch: winnerClass,
+    matchType,
+    topScore: winnerScore,
     overrideApplied: false,
+    flagForDiscussion,
     allScores: entries,
   };
 }
@@ -1732,6 +1794,7 @@ function runFullAssessmentComplete(answers, flags) {
   );
   const classMatch = determineBestMatch(modifiedScores, {
     techniqueSupportNeed: base.rawScores.q7,
+    programmingSupportNeed: base.rawScores.q6,
     q3Answer: answers.q3,
     foundationScore: modifiedScores.foundation,
   });
