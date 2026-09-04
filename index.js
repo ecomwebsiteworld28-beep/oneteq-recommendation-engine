@@ -1793,22 +1793,32 @@ console.log("Class Match:", completeResultA.classMatch);
 console.log("PT Need:", completeResultA.ptNeed);
 // ===== FINAL EXTENSION: ADD PRICING TO THE ORCHESTRATOR =====
 
-function buildRecommendedPackage(classMatch, ptNeed) {
+// Section 15 of the brief: membership follows the client's agreed session
+// frequency, suggest the lowest suitable tier, never fill sessions to sell
+// more. Section 11: desired ONETEQ frequency (Q5) constrains
+// recommendations. This is a direct mapping, not a floor - the class
+// match decides *which* class, Q5 alone decides *how many sessions*, and
+// nothing ever upgrades past what Q5 indicates.
+// "I'd like you to recommend this" is an explicit punt (same idea as
+// "Recommend for me"/"Unsure" elsewhere in the engine) - null here, same
+// as a genuinely blank/unrecognized answer, so no membership is guessed
+// and it's flagged for staff discussion instead.
+const Q5_FREQUENCY_TO_MEMBERSHIP_TIER = {
+  "Occasional, less than weekly": "bronze_membership",
+  "1 session per week": "bronze_membership",
+  "2 sessions per week": "silver_membership",
+  "3 sessions per week": "gold_membership",
+  "4+ sessions per week": "platinum_membership",
+  "I'd like you to recommend this": null,
+};
+
+function buildRecommendedPackage(ptNeed, answers) {
   const productIds = [];
 
-  // Map class match to a membership product (simplified mapping for now)
-  if (
-    classMatch.bestStartingMatch === "hybrid" ||
-    classMatch.bestStartingMatch === "hyrox"
-  ) {
-    productIds.push("gold_membership"); // 12 sessions/month as a reasonable default
-  } else if (classMatch.bestStartingMatch === "lift") {
-    productIds.push("silver_membership");
-  } else if (
-    classMatch.bestStartingMatch === "Foundation" ||
-    classMatch.bestStartingMatch === "foundation"
-  ) {
-    productIds.push("bronze_membership");
+  const membershipTier = lookupAnswer(Q5_FREQUENCY_TO_MEMBERSHIP_TIER, answers.q5);
+  const membershipUnresolved = !membershipTier;
+  if (membershipTier) {
+    productIds.push(membershipTier);
   }
 
   // Add PT/coaching based on need band
@@ -1821,15 +1831,13 @@ function buildRecommendedPackage(classMatch, ptNeed) {
   }
   // LOW band = no PT added automatically
 
-  return calculatePackageTotal(productIds);
+  const packageResult = calculatePackageTotal(productIds);
+  return { ...packageResult, membershipUnresolved };
 }
 
 function runFullAssessmentWithPricing(answers, flags) {
   const complete = runFullAssessmentComplete(answers, flags);
-  const packageResult = buildRecommendedPackage(
-    complete.classMatch,
-    complete.ptNeed,
-  );
+  const packageResult = buildRecommendedPackage(complete.ptNeed, answers);
 
   return { ...complete, recommendedPackage: packageResult };
 }
