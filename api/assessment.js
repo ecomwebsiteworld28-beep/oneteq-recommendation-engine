@@ -14,6 +14,33 @@ const {
 // Update this if the production domain ever changes.
 const RESULTS_PAGE_BASE_URL = 'https://oneteq-recommendation-engine.vercel.app';
 
+// Q21_Longterm_Focus's picklist options, mapped 1:1 onto the q21_* flags
+// the class-scoring functions read. "I'm not particularly focused on
+// long-term health" and "I'm unsure / I'd like advice" map to no flag.
+// Note: q21_Mobility and q21_ActivityParticipation aren't read by any
+// scoring function today (checked every line of calculateFoundationScore/
+// calculateLiftScore/calculateHybridScore/calculateHyroxScore) — derived
+// anyway so they're ready the moment something reads them.
+const Q21_OPTION_TO_FLAG = {
+  'Maintain/build strength & muscle': 'q21_Strength',
+  'Cardiovascular fitness & heart health': 'q21_Cardiovascular',
+  'Mobility & movement': 'q21_Mobility',
+  'Balance & physical confidence': 'q21_Balance',
+  'Remain active & independent as I get older': 'q21_Independence',
+  'Healthy weight & body composition': 'q21_BodyComposition',
+  'Continue enjoying hobbies, sport & activities': 'q21_ActivityParticipation',
+  'Reduce future pain or injury risk': 'q21_InjuryPrevention',
+};
+
+// Q22_Current_Activities categorization — the client has delegated this
+// categorization to us. Change this constant, not the derivation logic
+// below, if the categorization should change.
+const Q22_ACTIVITY_CATEGORIES = {
+  STRENGTH: ['Strength/weights'],
+  CARDIO: ['Running', 'Cycling', 'Swimming', 'Walking/hiking', 'Team/racket sports'],
+  NEITHER: ['Yoga/Pilates/mobility', 'Exercise classes', 'Other'],
+};
+
 // A null/undefined score means "unresolved" (e.g. a blank/unanswered
 // question), not zero. Sending undefined would make JSON.stringify drop
 // the field from the request entirely, leaving whatever value GHL already
@@ -67,8 +94,10 @@ function buildAnswersAndGoalFields(contact) {
 
   const q1Goal = scalarAnswer(getCustomFieldValue(contact, GHL_SURVEY_ANSWER_FIELD_IDS.q1Goal));
   const q2Goals = getCustomFieldValue(contact, GHL_SURVEY_ANSWER_FIELD_IDS.q2Goals);
+  const q21Answer = getCustomFieldValue(contact, GHL_SURVEY_ANSWER_FIELD_IDS.q21);
+  const q22Answer = getCustomFieldValue(contact, GHL_SURVEY_ANSWER_FIELD_IDS.q22);
 
-  return { answers, q1Goal, q2Goals };
+  return { answers, q1Goal, q2Goals, q21Answer, q22Answer };
 }
 
 // flags.goals needs to be an array. Q1_Main_Goal is a single string;
@@ -98,13 +127,76 @@ function buildGoals(q1Goal, q2Goals) {
   return goals;
 }
 
-async function updateGhlContact(contactId, result, answers) {
-  // Include the raw answer inputs alongside the scored output, so
-  // Assessment_Raw_Response shows what came in as well as what was
-  // scored from it — useful for debugging a wrong-looking result without
-  // having to separately go find what the contact's answers were at the
-  // time.
-  const debugSnapshot = { ...result, rawAnswers: answers };
+// Q21/Q22 are multi-select fields and normally come back as arrays, but
+// handle a comma-separated string too in case that ever changes.
+function toArray(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    return value.split(',').map((item) => item.trim());
+  }
+  return [];
+}
+
+function deriveQ21Flags(q21Answer) {
+  const selections = toArray(q21Answer);
+  const flags = {};
+  for (const flagName of Object.values(Q21_OPTION_TO_FLAG)) {
+    flags[flagName] = false;
+  }
+  selections.forEach((selection) => {
+    const flagName = Q21_OPTION_TO_FLAG[selection];
+    if (flagName) flags[flagName] = true;
+  });
+  return flags;
+}
+
+// Derives existing-exposure/training-gap flags from Q22, per the agreed
+// categorization: has strength but no cardio -> gap is CARDIO; has cardio
+// but no strength -> gap is STRENGTH; has both, or q22_None, -> NONE.
+// (Both-true isn't a gap; q22_None is a complete beginner, and applying
+// the MIXED modifier there would boost Hybrid by +3 and wrongly push a
+// beginner away from Foundation, so NONE is the safe default.)
+function deriveQ22Flags(q22Answer) {
+  const selections = toArray(q22Answer);
+  const q22_None = selections.includes('None currently');
+  const existingStrengthExposure = selections.some((s) => Q22_ACTIVITY_CATEGORIES.STRENGTH.includes(s));
+  const existingCardioExposure = selections.some((s) => Q22_ACTIVITY_CATEGORIES.CARDIO.includes(s));
+  const existingMixedTraining = existingStrengthExposure && existingCardioExposure;
+
+  let primaryTrainingGap = 'NONE';
+  if (!q22_None) {
+    if (existingStrengthExposure && !existingCardioExposure) primaryTrainingGap = 'CARDIO';
+    else if (existingCardioExposure && !existingStrengthExposure) primaryTrainingGap = 'STRENGTH';
+  }
+
+  return {
+    q22_None,
+    existingStrengthExposure,
+    existingCardioExposure,
+    existingMixedTraining,
+    // Mapped onto the camelCase properties the scoring functions actually
+    // read (checked every line of calculateFoundationScore/
+    // calculateLiftScore/calculateHybridScore):
+    regularStrengthTraining: existingStrengthExposure, // Foundation
+    existingStrengthCardioGap: existingStrengthExposure && !existingCardioExposure, // Hybrid
+    existingCardioStrengthGap: existingCardioExposure && !existingStrengthExposure, // Hybrid
+    strengthAndCardioRelevant: existingMixedTraining, // Hybrid
+    primaryTrainingGap,
+  };
+}
+
+async function updateGhlContact(contactId, result, answers, q21Answer, q22Answer, derivedFlags) {
+  // Include the raw answer inputs (Q3-Q20 plus the raw Q21/Q22
+  // selections) and every derived Q21/Q22 flag alongside the scored
+  // output, so Assessment_Raw_Response shows what came in, what was
+  // derived from it, and what was scored — useful for debugging a
+  // wrong-looking result without having to separately go find the
+  // contact's answers at the time.
+  const debugSnapshot = {
+    ...result,
+    rawAnswers: { ...answers, q21: q21Answer, q22: q22Answer },
+    derivedFlags,
+  };
 
   const customFields = [
     {
@@ -191,15 +283,18 @@ export default async function handler(req, res) {
       });
     }
 
-    const { answers, q1Goal, q2Goals } = buildAnswersAndGoalFields(contact);
+    const { answers, q1Goal, q2Goals, q21Answer, q22Answer } = buildAnswersAndGoalFields(contact);
+    const derivedFlags = { ...deriveQ21Flags(q21Answer), ...deriveQ22Flags(q22Answer) };
 
-    // Flags (Q21/Q22 selections, longevityFocus, preferredStyle, etc.)
-    // still come from the webhook body — only the raw Q3-Q20 + goal
-    // answers moved to being read from the contact.
+    // Other flags (longevityFocus, preferredStyle, etc.) still come from
+    // the webhook body — only goals and the Q21/Q22-derived flags moved to
+    // being read from the contact. Derived flags take precedence over
+    // anything with the same name in the webhook body.
     let flags = source.flags || {};
     if (!Array.isArray(flags.goals)) {
       flags = { ...flags, goals: buildGoals(q1Goal, q2Goals) };
     }
+    flags = { ...flags, ...derivedFlags };
 
     const result = runFullAssessmentWithPricing(answers, flags);
 
@@ -210,7 +305,7 @@ export default async function handler(req, res) {
       console.warn('Skipping GHL contact update: GHL_API_KEY is not set');
     } else {
       try {
-        await updateGhlContact(contactId, result, answers);
+        await updateGhlContact(contactId, result, answers, q21Answer, q22Answer, derivedFlags);
       } catch (ghlError) {
         console.error('GHL contact update failed:', ghlError.message);
       }
