@@ -432,12 +432,19 @@ function renderComponentGroups(components) {
   }).join('');
 }
 
+// Prices are only ever integers or .5/.7-style catalogue values (e.g.
+// physio_followup's discountedPrice of 56.7) - always show two decimals
+// so "£56.7" never reads as a possibly-truncated amount next to "£56.70".
+function formatMoney(n) {
+  return '£' + Number(n).toFixed(2);
+}
+
 function renderTierCard(name, label, tier, highlighted) {
   return `
     <div class="tier-card${highlighted ? ' tier-card-highlight' : ''}" data-tier-card="${escapeHtml(name)}">
       <div class="tier-card-name">${escapeHtml(label)}</div>
-      <div class="tier-card-price">£${escapeHtml(tier.recurringMonthlyTotal)}<span>/mo</span></div>
-      <div class="tier-card-oneoff">+ £${escapeHtml(tier.oneOffTotal)} one-off</div>
+      <div class="tier-card-price">${formatMoney(tier.recurringMonthlyTotal)}<span>/mo</span></div>
+      <div class="tier-card-oneoff">+ ${formatMoney(tier.oneOffTotal)} one-off</div>
       <button type="button" class="load-tier-btn" data-load-tier="${escapeHtml(name)}">Load this tier</button>
     </div>`;
 }
@@ -577,7 +584,7 @@ function renderUnlockedPage(contact, result, id) {
       var loadedTier = ${JSON.stringify(initialTier)};
 
       function formatMoney(n) {
-        return '£' + (Math.round(n * 100) / 100).toString();
+        return '£' + n.toFixed(2);
       }
 
       // Reads the live DOM into the same shape sanitizeComponentState
@@ -817,14 +824,46 @@ async function handleSave(req, res, id) {
     components,
   };
 
+  // What we're asking GHL to write, paired with the field id needed to
+  // check what it actually echoes back — a 2xx status only proves GHL
+  // accepted the request, not that every field took the value sent.
+  const writtenFields = [
+    { key: GHL_CUSTOM_FIELD_KEYS.finalPackageSummary, id: GHL_CUSTOM_FIELD_IDS.finalPackageSummary, value: summary },
+    { key: GHL_CUSTOM_FIELD_KEYS.finalPriceMonthly, id: GHL_CUSTOM_FIELD_IDS.finalPriceMonthly, value: priced.recurringMonthlyTotal },
+    { key: GHL_CUSTOM_FIELD_KEYS.finalPriceOneOff, id: GHL_CUSTOM_FIELD_IDS.finalPriceOneOff, value: priced.oneOffTotal },
+    { key: GHL_CUSTOM_FIELD_KEYS.finalPackageItemKeys, id: GHL_CUSTOM_FIELD_IDS.finalPackageItemKeys, value: acceptedProductIds.join(',') },
+    { key: GHL_CUSTOM_FIELD_KEYS.finalPackageDecisions, id: GHL_CUSTOM_FIELD_IDS.finalPackageDecisions, value: JSON.stringify(decisionAudit) },
+  ];
+
   try {
-    await updateGhlContactCustomFields(id, [
-      { key: GHL_CUSTOM_FIELD_KEYS.finalPackageSummary, fieldValue: summary },
-      { key: GHL_CUSTOM_FIELD_KEYS.finalPriceMonthly, fieldValue: priced.recurringMonthlyTotal },
-      { key: GHL_CUSTOM_FIELD_KEYS.finalPriceOneOff, fieldValue: priced.oneOffTotal },
-      { key: GHL_CUSTOM_FIELD_KEYS.finalPackageItemKeys, fieldValue: acceptedProductIds.join(',') },
-      { key: GHL_CUSTOM_FIELD_KEYS.finalPackageDecisions, fieldValue: JSON.stringify(decisionAudit) },
-    ]);
+    const ghlResponse = await updateGhlContactCustomFields(
+      id,
+      writtenFields.map((f) => ({ key: f.key, fieldValue: f.value })),
+    );
+    const echoedContact = ghlResponse && ghlResponse.contact;
+
+    // Verify every field actually took the value sent, from what GHL
+    // itself echoed back in the same response — never assume a 2xx status
+    // means every field was applied.
+    const failedFields = writtenFields.filter((f) => {
+      const echoed = getCustomFieldValue(echoedContact, f.id);
+      return String(echoed ?? '') !== String(f.value ?? '');
+    });
+
+    if (!echoedContact || failedFields.length > 0) {
+      console.error(
+        'Agreed Plan save did not verify against GHL\'s response:',
+        failedFields.map((f) => f.key),
+      );
+      res.status(502).json({
+        status: 'error',
+        message: echoedContact
+          ? `GHL did not confirm: ${failedFields.map((f) => f.key).join(', ')}. Nothing should be assumed saved — please retry.`
+          : 'GHL did not return the updated contact — nothing should be assumed saved. Please retry.',
+      });
+      return;
+    }
+
     res.status(200).json({
       status: 'success',
       monthlyTotal: priced.recurringMonthlyTotal,
