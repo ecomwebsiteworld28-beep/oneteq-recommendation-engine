@@ -6,7 +6,7 @@
 // COMPONENTS registry below for how each control maps onto v3Catalogue.
 
 const crypto = require('crypto');
-const { v3Catalogue, getPhysioPricing, calculateV3PackageTotal } = require('../../index.js');
+const { v3Catalogue, getPhysioPricing, calculateV3PackageTotal, runFullAssessmentWithPricing } = require('../../index.js');
 const {
   GHL_CUSTOM_FIELD_IDS,
   GHL_CUSTOM_FIELD_KEYS,
@@ -14,6 +14,18 @@ const {
   getCustomFieldValue,
   updateGhlContactCustomFields,
 } = require('../../lib/ghl.js');
+const {
+  scalarAnswer,
+  buildAnswersAndGoalFields,
+  buildGoals,
+  deriveQ21Flags,
+  deriveQ22Flags,
+  deriveEventAndRiskFlags,
+  PREFERRED_STYLE_OPTION_TO_VALUE,
+  CLINICAL_BARRIER_OPTION_TO_VALUE,
+  INDIVIDUAL_ATTENTION_DEFAULT,
+} = require('../../lib/deriveFlags.js');
+const { writeAssessmentResultToGhl } = require('../../lib/writeAssessmentResult.js');
 const { escapeHtml, renderPage, renderRadarChart } = require('../../lib/html.js');
 
 // Membership tiers and ongoing coaching are what qualify a client for
@@ -28,6 +40,72 @@ const MEMBERSHIP_OR_COACHING_KEYS = new Set([
   'coaching_1x_week',
   'coaching_2x_week',
 ]);
+
+// ===== SECTION 21: STAFF ASSESSMENT (staff-only inputs) =====
+// Preferred_Training_Style, Individual_Attention_Preference,
+// Postnatal_Return_To_Exercise and Clinical_Barrier_To_Primary_Goal are
+// not survey questions - staff enter them here. PREFERRED_STYLE_OPTION_TO_VALUE
+// and CLINICAL_BARRIER_OPTION_TO_VALUE come from lib/deriveFlags.js so the
+// staff page's option list and the engine's own reading of these fields
+// can never drift apart - exactly the two-derivation-paths problem this
+// whole refactor exists to avoid.
+const PREFERRED_TRAINING_STYLE_OPTIONS = Object.keys(PREFERRED_STYLE_OPTION_TO_VALUE);
+const CLINICAL_BARRIER_OPTIONS = Object.keys(CLINICAL_BARRIER_OPTION_TO_VALUE);
+const INDIVIDUAL_ATTENTION_OPTIONS = ['LOW', 'MODERATE', 'HIGH'];
+
+const STAFF_ASSESSMENT_DEFAULTS = {
+  preferredTrainingStyle: 'No preference',
+  individualAttentionPreference: INDIVIDUAL_ATTENTION_DEFAULT,
+  postnatalReturnToExercise: false,
+  clinicalBarrierToPrimaryGoal: 'Not reviewed',
+};
+
+function getStaffAssessmentRawValues(contact) {
+  return {
+    preferredTrainingStyle:
+      scalarAnswer(getCustomFieldValue(contact, GHL_CUSTOM_FIELD_IDS.preferredTrainingStyle)) ||
+      STAFF_ASSESSMENT_DEFAULTS.preferredTrainingStyle,
+    individualAttentionPreference:
+      scalarAnswer(getCustomFieldValue(contact, GHL_CUSTOM_FIELD_IDS.individualAttentionPreference)) ||
+      STAFF_ASSESSMENT_DEFAULTS.individualAttentionPreference,
+    postnatalReturnToExercise:
+      scalarAnswer(getCustomFieldValue(contact, GHL_CUSTOM_FIELD_IDS.postnatalReturnToExercise)) === 'Yes',
+    clinicalBarrierToPrimaryGoal:
+      scalarAnswer(getCustomFieldValue(contact, GHL_CUSTOM_FIELD_IDS.clinicalBarrierToPrimaryGoal)) ||
+      STAFF_ASSESSMENT_DEFAULTS.clinicalBarrierToPrimaryGoal,
+  };
+}
+
+// Never trust the shape or values of a client payload - same principle as
+// sanitizeComponentState below.
+function sanitizeStaffAssessment(raw) {
+  raw = raw && typeof raw === 'object' ? raw : {};
+  return {
+    preferredTrainingStyle: PREFERRED_TRAINING_STYLE_OPTIONS.includes(raw.preferredTrainingStyle)
+      ? raw.preferredTrainingStyle
+      : STAFF_ASSESSMENT_DEFAULTS.preferredTrainingStyle,
+    individualAttentionPreference: INDIVIDUAL_ATTENTION_OPTIONS.includes(raw.individualAttentionPreference)
+      ? raw.individualAttentionPreference
+      : STAFF_ASSESSMENT_DEFAULTS.individualAttentionPreference,
+    postnatalReturnToExercise: Boolean(raw.postnatalReturnToExercise),
+    clinicalBarrierToPrimaryGoal: CLINICAL_BARRIER_OPTIONS.includes(raw.clinicalBarrierToPrimaryGoal)
+      ? raw.clinicalBarrierToPrimaryGoal
+      : STAFF_ASSESSMENT_DEFAULTS.clinicalBarrierToPrimaryGoal,
+  };
+}
+
+// Section 21: "Professional overrides with mandatory reason" - a reason
+// is required whenever ANY of the four is set away from its own default,
+// regardless of whether that's a new change or a value left over from a
+// previous recalculation.
+function isStaffAssessmentAwayFromDefault(staffAssessment) {
+  return (
+    staffAssessment.preferredTrainingStyle !== STAFF_ASSESSMENT_DEFAULTS.preferredTrainingStyle ||
+    staffAssessment.individualAttentionPreference !== STAFF_ASSESSMENT_DEFAULTS.individualAttentionPreference ||
+    staffAssessment.postnatalReturnToExercise !== STAFF_ASSESSMENT_DEFAULTS.postnatalReturnToExercise ||
+    staffAssessment.clinicalBarrierToPrimaryGoal !== STAFF_ASSESSMENT_DEFAULTS.clinicalBarrierToPrimaryGoal
+  );
+}
 
 // ===== SECTION 16 COMPONENT REGISTRY =====
 // Declarative definition of every control the Agreed Plan exposes, grouped
@@ -475,6 +553,8 @@ function renderUnlockedPage(contact, result, id) {
   const initialTier = 'recommended';
   const initialComponents = tierPresets[initialTier];
 
+  const staffAssessmentValues = getStaffAssessmentRawValues(contact);
+
   // Only what the client-side pricing mirror needs — name/price/billing/
   // discountedPrice — not the whole catalogue object.
   const priceMap = Object.entries(v3Catalogue).reduce((acc, [key, item]) => {
@@ -511,6 +591,17 @@ function renderUnlockedPage(contact, result, id) {
       .agreed-plan-totals { font-size: 0.95rem; }
       .agreed-plan-totals strong { font-size: 1.2rem; }
       .save-btn { margin-top: 12px; padding: 10px 20px; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-size: 1rem; cursor: pointer; }
+      .staff-assessment { margin-top: 20px; padding: 16px; background: #fafaf9; border: 1px solid #e7e5e4; border-radius: 10px; }
+      .staff-assessment-grid { display: flex; flex-wrap: wrap; gap: 16px; }
+      .staff-assessment-field { flex: 1 1 220px; }
+      .staff-assessment-field label { display: block; font-size: 0.8rem; font-weight: 600; color: #57534e; margin-bottom: 4px; }
+      .staff-assessment-field select { width: 100%; }
+      .staff-assessment-reason { margin-top: 14px; }
+      .staff-assessment-reason label { display: block; font-size: 0.8rem; font-weight: 600; color: #57534e; margin-bottom: 4px; }
+      .staff-assessment-reason textarea { width: 100%; min-height: 60px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.85rem; box-sizing: border-box; font-family: inherit; }
+      .staff-assessment-reason-required { color: #b45309; font-weight: 600; }
+      .recalculate-btn { margin-top: 12px; padding: 8px 16px; background: #fff; color: #57534e; border: 1px solid #57534e; border-radius: 8px; font-size: 0.9rem; cursor: pointer; }
+      .recalculate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     </style>
 
     <h1 style="margin-bottom: 4px;">${escapeHtml(clientName)}</h1>
@@ -534,6 +625,55 @@ function renderUnlockedPage(contact, result, id) {
     <div style="margin-top: 28px;">
       <h2 style="font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 8px;">PT / Coaching Need</h2>
       <div style="font-size: 1.25rem; font-weight: 600;">${escapeHtml(ptNeedLabel)}</div>
+    </div>
+
+    <div style="margin-top: 28px;">
+      <h2 style="font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 4px;">Staff Assessment</h2>
+      <p style="color: #64748b; font-size: 0.85rem; margin-top: 0;">Section 21 — not survey questions. Setting any of these away from its default requires a reason, and re-runs the assessment below.</p>
+      <div class="staff-assessment">
+        <div class="staff-assessment-grid">
+          <div class="staff-assessment-field">
+            <label>Preferred Training Style</label>
+            <select id="staff-preferred-style">
+              ${optionsHtml(
+                PREFERRED_TRAINING_STYLE_OPTIONS.map((o) => ({ key: o, label: o })),
+                staffAssessmentValues.preferredTrainingStyle,
+              )}
+            </select>
+          </div>
+          <div class="staff-assessment-field">
+            <label>Individual Attention Preference</label>
+            <select id="staff-individual-attention">
+              ${optionsHtml(
+                INDIVIDUAL_ATTENTION_OPTIONS.map((o) => ({ key: o, label: o })),
+                staffAssessmentValues.individualAttentionPreference,
+              )}
+            </select>
+          </div>
+          <div class="staff-assessment-field">
+            <label>Clinical Barrier to Primary Goal</label>
+            <select id="staff-clinical-barrier">
+              ${optionsHtml(
+                CLINICAL_BARRIER_OPTIONS.map((o) => ({ key: o, label: o })),
+                staffAssessmentValues.clinicalBarrierToPrimaryGoal,
+              )}
+            </select>
+          </div>
+          <div class="staff-assessment-field">
+            <label>Postnatal Return to Exercise</label>
+            <label class="inline-check" style="margin-top: 6px;">
+              <input type="checkbox" id="staff-postnatal" ${staffAssessmentValues.postnatalReturnToExercise ? 'checked' : ''} />
+              Yes
+            </label>
+          </div>
+        </div>
+        <div class="staff-assessment-reason">
+          <label id="staff-reason-label">Reason for override</label>
+          <textarea id="staff-reason" placeholder="Required when any value above is set away from its default"></textarea>
+        </div>
+        <button id="recalculate-btn" type="button" class="recalculate-btn">Recalculate</button>
+        <span id="recalculate-status" style="margin-left: 12px; font-size: 0.9rem; color: #64748b;"></span>
+      </div>
     </div>
 
     <div style="margin-top: 28px;">
@@ -775,6 +915,90 @@ function renderUnlockedPage(contact, result, id) {
       });
     })();
     </script>
+
+    <script>
+    (function () {
+      var DEFAULTS = ${JSON.stringify(STAFF_ASSESSMENT_DEFAULTS)};
+      var styleSelect = document.getElementById('staff-preferred-style');
+      var attentionSelect = document.getElementById('staff-individual-attention');
+      var barrierSelect = document.getElementById('staff-clinical-barrier');
+      var postnatalCheckbox = document.getElementById('staff-postnatal');
+      var reasonInput = document.getElementById('staff-reason');
+      var reasonLabel = document.getElementById('staff-reason-label');
+      var recalcBtn = document.getElementById('recalculate-btn');
+      var recalcStatus = document.getElementById('recalculate-status');
+
+      function readStaffAssessment() {
+        return {
+          preferredTrainingStyle: styleSelect.value,
+          individualAttentionPreference: attentionSelect.value,
+          postnatalReturnToExercise: postnatalCheckbox.checked,
+          clinicalBarrierToPrimaryGoal: barrierSelect.value,
+        };
+      }
+
+      function isAwayFromDefault(v) {
+        return (
+          v.preferredTrainingStyle !== DEFAULTS.preferredTrainingStyle ||
+          v.individualAttentionPreference !== DEFAULTS.individualAttentionPreference ||
+          v.postnatalReturnToExercise !== DEFAULTS.postnatalReturnToExercise ||
+          v.clinicalBarrierToPrimaryGoal !== DEFAULTS.clinicalBarrierToPrimaryGoal
+        );
+      }
+
+      // Purely a UX nicety (highlight that a reason is now required, stop
+      // the obvious empty-reason click early) - the server independently
+      // re-validates and refuses to run without a reason regardless of
+      // what this does.
+      function updateReasonRequirement() {
+        var away = isAwayFromDefault(readStaffAssessment());
+        reasonLabel.innerHTML = away
+          ? 'Reason for override <span class="staff-assessment-reason-required">(required)</span>'
+          : 'Reason for override';
+      }
+
+      [styleSelect, attentionSelect, barrierSelect, postnatalCheckbox].forEach(function (el) {
+        el.addEventListener('change', updateReasonRequirement);
+      });
+      updateReasonRequirement();
+
+      recalcBtn.addEventListener('click', function () {
+        var staffAssessment = readStaffAssessment();
+        var reason = reasonInput.value.trim();
+
+        if (isAwayFromDefault(staffAssessment) && !reason) {
+          recalcStatus.textContent = 'A reason is required when any value above is set away from its default.';
+          return;
+        }
+
+        recalcBtn.disabled = true;
+        recalcStatus.textContent = 'Recalculating...';
+        fetch(window.location.pathname, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'recalculate', staffAssessment: staffAssessment, reason: reason }),
+        })
+          .then(function (r) {
+            return r.json().then(function (data) { return { ok: r.ok, data: data }; });
+          })
+          .then(function (result) {
+            if (result.ok) {
+              // Simplest correct way to reflect the new tiers/class match/
+              // staff values everywhere on the page without duplicating
+              // the server's own render logic in JS.
+              window.location.reload();
+            } else {
+              recalcBtn.disabled = false;
+              recalcStatus.textContent = 'Recalculate failed: ' + (result.data && result.data.message ? result.data.message : 'unknown error');
+            }
+          })
+          .catch(function (err) {
+            recalcBtn.disabled = false;
+            recalcStatus.textContent = 'Recalculate failed: ' + err.message;
+          });
+      });
+    })();
+    </script>
   `;
 
   return renderPage(`Staff Agreed Plan — ${clientName}`, body);
@@ -876,6 +1100,126 @@ async function handleSave(req, res, id) {
   }
 }
 
+// Recalculates the AI's own recommendation with the Staff Assessment
+// values folded in (brief section 21) - separate from handleSave above,
+// which only ever touches the staff's manually-agreed Final_* fields.
+// Final_* is never written here.
+async function handleRecalculate(req, res, id) {
+  if (!isAuthed(req)) {
+    res.status(401).json({ status: 'error', message: 'Not authenticated' });
+    return;
+  }
+
+  const body = req.body || {};
+  const staffAssessment = sanitizeStaffAssessment(body.staffAssessment);
+  const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+
+  if (isStaffAssessmentAwayFromDefault(staffAssessment) && !reason) {
+    res.status(400).json({
+      status: 'error',
+      message: 'A reason is required when any Staff Assessment value is set away from its default.',
+    });
+    return;
+  }
+
+  let contact;
+  try {
+    contact = await getGhlContact(id);
+  } catch (error) {
+    console.error('Failed to fetch GHL contact for recalculate:', error.message);
+    res.status(502).json({ status: 'error', message: 'Could not fetch this contact from GHL.' });
+    return;
+  }
+  if (!contact) {
+    res.status(404).json({ status: 'error', message: 'Client not found.' });
+    return;
+  }
+
+  // Save the Staff Assessment fields (and the reason, appended - not
+  // overwritten, so Override_Reason keeps a running history) before
+  // recomputing, so what gets scored is exactly what's persisted, and a
+  // failed recalculation still leaves the review saved rather than lost.
+  const customFieldWrites = [
+    { key: GHL_CUSTOM_FIELD_KEYS.preferredTrainingStyle, fieldValue: staffAssessment.preferredTrainingStyle },
+    {
+      key: GHL_CUSTOM_FIELD_KEYS.individualAttentionPreference,
+      fieldValue: staffAssessment.individualAttentionPreference,
+    },
+    {
+      key: GHL_CUSTOM_FIELD_KEYS.postnatalReturnToExercise,
+      fieldValue: staffAssessment.postnatalReturnToExercise ? 'Yes' : 'No',
+    },
+    {
+      key: GHL_CUSTOM_FIELD_KEYS.clinicalBarrierToPrimaryGoal,
+      fieldValue: staffAssessment.clinicalBarrierToPrimaryGoal,
+    },
+  ];
+
+  if (reason) {
+    const existingReason = scalarAnswer(getCustomFieldValue(contact, GHL_CUSTOM_FIELD_IDS.overrideReason));
+    const entry = `[${new Date().toISOString()}] ${reason}`;
+    customFieldWrites.push({
+      key: GHL_CUSTOM_FIELD_KEYS.overrideReason,
+      fieldValue: existingReason ? `${existingReason}\n${entry}` : entry,
+    });
+  }
+
+  try {
+    await updateGhlContactCustomFields(id, customFieldWrites);
+  } catch (error) {
+    console.error('Failed to save Staff Assessment values to GHL:', error.message);
+    res.status(502).json({ status: 'error', message: 'Could not save Staff Assessment values to GHL.' });
+    return;
+  }
+
+  // Rebuild answers/flags exactly as api/assessment.js does (same shared
+  // lib/deriveFlags.js path), then layer the just-saved Staff Assessment
+  // values on top - using what was just validated and written, not a
+  // fresh read, to avoid a read-after-write race against GHL.
+  const { answers, q1Goal, q2Goals, q21Answer, q22Answer, q17DetailAnswer, balancedTrainingNeedAnswer } =
+    buildAnswersAndGoalFields(contact);
+  const goals = buildGoals(q1Goal, q2Goals);
+  const q21Flags = deriveQ21Flags(q21Answer);
+  const q22Flags = deriveQ22Flags(q22Answer);
+  const eventAndRiskFlags = deriveEventAndRiskFlags(answers, q17DetailAnswer, goals, q21Flags.q21_InjuryPrevention);
+
+  const derivedFlags = {
+    ...q21Flags,
+    ...q22Flags,
+    ...eventAndRiskFlags,
+    balancedTrainingNeed: scalarAnswer(balancedTrainingNeedAnswer) === 'Yes',
+    preferredStyle: PREFERRED_STYLE_OPTION_TO_VALUE[staffAssessment.preferredTrainingStyle] || 'NONE',
+    // Section 12: affects VIP composition only (see
+    // adjustVipCoachingForAttentionPreference in index.js) - never
+    // ptNeed, which stays assessed-only.
+    individualAttentionPreference: staffAssessment.individualAttentionPreference,
+    postnatalReturnToExercise: staffAssessment.postnatalReturnToExercise,
+    // undefined ("Not reviewed") deliberately passed through - index.js's
+    // own fallthrough decides whether this overrides the Q10 stopgap.
+    clinicalBarrierToPrimaryGoalOverride: CLINICAL_BARRIER_OPTION_TO_VALUE[staffAssessment.clinicalBarrierToPrimaryGoal],
+  };
+
+  const flags = { goals, ...derivedFlags };
+  let result;
+  try {
+    result = runFullAssessmentWithPricing(answers, flags);
+  } catch (error) {
+    console.error('Recalculation failed:', error.message);
+    res.status(500).json({ status: 'error', message: `Recalculation failed: ${error.message}` });
+    return;
+  }
+
+  try {
+    await writeAssessmentResultToGhl(id, result, answers, q21Answer, q22Answer, derivedFlags);
+  } catch (error) {
+    console.error('Failed to write recalculated result to GHL:', error.message);
+    res.status(502).json({ status: 'error', message: 'Recalculated, but could not save the result to GHL.' });
+    return;
+  }
+
+  res.status(200).json({ status: 'success' });
+}
+
 module.exports = async function handler(req, res) {
   const { id } = req.query;
 
@@ -900,6 +1244,11 @@ module.exports = async function handler(req, res) {
 
     if (body.action === 'save') {
       await handleSave(req, res, id);
+      return;
+    }
+
+    if (body.action === 'recalculate') {
+      await handleRecalculate(req, res, id);
       return;
     }
 

@@ -1714,10 +1714,16 @@ function runFullAssessment(answers, flags = {}) {
   // only ever contains q3-q20), so both were always false in production.
   // Derived properly now: the weight/body-fat one from the client's actual
   // stated goals; the clinical one from Q10 (see CLINICAL_BARRIER_Q10_ANSWERS
-  // above - pending client confirmation).
-  const clinicalBarrierToPrimaryGoal = CLINICAL_BARRIER_Q10_ANSWERS.includes(
-    normalizeAnswer(answers.q10),
-  );
+  // above - pending client confirmation) UNLESS a staff member has set
+  // Clinical_Barrier_To_Primary_Goal directly (brief section 21) - a
+  // reviewed staff value always wins over the Q10 stopgap.
+  // flags.clinicalBarrierToPrimaryGoalOverride is a genuine tri-state:
+  // undefined means "not reviewed" (fall through to Q10), true/false
+  // means staff has explicitly confirmed one way or the other.
+  const clinicalBarrierToPrimaryGoal =
+    flags.clinicalBarrierToPrimaryGoalOverride !== undefined
+      ? flags.clinicalBarrierToPrimaryGoalOverride
+      : CLINICAL_BARRIER_Q10_ANSWERS.includes(normalizeAnswer(answers.q10));
   const isWeightBodyFatPrimaryGoal = (flags.goals || []).includes(
     "Lose weight or reduce body fat",
   );
@@ -2605,6 +2611,41 @@ function deriveTestingServices(complete, flags) {
 // VIP_IF_DESIRED and must carry the client-facing "If Desired" label.
 const VIP_ENHANCEMENT_NEEDED_PRODUCT_IDS = new Set(["coaching_2x_week"]);
 
+// Brief section 12: Individual_Attention_Preference is "staff-editable
+// and affects VIP, not assessed PT Need" - LOW/MODERATE/HIGH nudges VIP's
+// own ongoing-coaching product up or down this ladder (ascending 1:1
+// intensity), independently of Essential/Recommended, and never touches
+// ptNeed/calculatePTNeedScore at all. MODERATE (the default, whenever
+// staff haven't set a preference) leaves VIP exactly as
+// getCoachingPricing already computes it from the assessed PT band.
+const VIP_COACHING_ATTENTION_LADDER = [
+  "NONE",
+  "payg_1to1",
+  "coaching_technical_programming",
+  "coaching_1x_week",
+  "coaching_2x_week",
+];
+
+function adjustVipCoachingForAttentionPreference(vipCoachingProductIds, individualAttentionPreference) {
+  if (individualAttentionPreference !== "HIGH" && individualAttentionPreference !== "LOW") {
+    return vipCoachingProductIds; // MODERATE or unset - no adjustment
+  }
+
+  const includesInitial = vipCoachingProductIds.includes("initial_assessment");
+  const currentFrequency =
+    vipCoachingProductIds.find((id) => VIP_COACHING_ATTENTION_LADDER.includes(id)) || "NONE";
+  const currentIndex = VIP_COACHING_ATTENTION_LADDER.indexOf(currentFrequency);
+
+  const step = individualAttentionPreference === "HIGH" ? 1 : -1;
+  const newIndex = Math.max(0, Math.min(VIP_COACHING_ATTENTION_LADDER.length - 1, currentIndex + step));
+  const newFrequency = VIP_COACHING_ATTENTION_LADDER[newIndex];
+
+  const items = [];
+  if (includesInitial) items.push("initial_assessment");
+  if (newFrequency !== "NONE") items.push(newFrequency);
+  return items;
+}
+
 function buildTieredPackages(complete, answers, flags) {
   const { axes, services, ptNeed } = complete;
   const isWeightBodyFatPrimaryGoal = (flags.goals || []).includes(
@@ -2612,24 +2653,31 @@ function buildTieredPackages(complete, answers, flags) {
   );
   const testingServices = deriveTestingServices(complete, flags);
   const ancillaryIds = deriveAncillaryProductIds(services, testingServices);
+  const individualAttentionPreference = flags.individualAttentionPreference || "MODERATE";
 
   const membershipTier = lookupAnswer(Q5_FREQUENCY_TO_MEMBERSHIP_TIER, answers.q5);
   const membershipUnresolved = !membershipTier;
   const membershipItem = membershipTier ? [membershipTier] : [];
 
-  const productIdsForTier = (tier, ancillaryIdsForTier) => [
-    ...membershipItem,
-    ...getCoachingPricing(ptNeed.band, tier),
-    ...(services.nutrition.level
-      ? getNutritionPricing(
-          services.nutrition.level,
-          tier,
-          isWeightBodyFatPrimaryGoal,
-          axes.nutritionSupport.score,
-        )
-      : []),
-    ...ancillaryIdsForTier,
-  ];
+  const productIdsForTier = (tier, ancillaryIdsForTier) => {
+    let coachingIds = getCoachingPricing(ptNeed.band, tier);
+    if (tier === "vip") {
+      coachingIds = adjustVipCoachingForAttentionPreference(coachingIds, individualAttentionPreference);
+    }
+    return [
+      ...membershipItem,
+      ...coachingIds,
+      ...(services.nutrition.level
+        ? getNutritionPricing(
+            services.nutrition.level,
+            tier,
+            isWeightBodyFatPrimaryGoal,
+            axes.nutritionSupport.score,
+          )
+        : []),
+      ...ancillaryIdsForTier,
+    ];
+  };
 
   const priceTier = (productIds) => {
     const hasQualifyingMembershipOrCoaching = productIds.some((id) =>

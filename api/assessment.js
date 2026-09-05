@@ -2,58 +2,17 @@
 // This receives quiz answers from GHL and runs the real recommendation engine
 
 const { runFullAssessmentWithPricing } = require('../index.js');
+const { getGhlContact } = require('../lib/ghl.js');
 const {
-  GHL_CUSTOM_FIELD_KEYS,
-  GHL_SURVEY_ANSWER_FIELD_IDS,
-  getGhlContact,
-  getCustomFieldValue,
-  updateGhlContactCustomFields,
-} = require('../lib/ghl.js');
-
-// Hardcoded to match the exact URL you asked results_page_url to contain.
-// Update this if the production domain ever changes.
-const RESULTS_PAGE_BASE_URL = 'https://oneteq-recommendation-engine.vercel.app';
-
-// Q21_Longterm_Focus's picklist options, mapped 1:1 onto the q21_* flags
-// the class-scoring functions read. "I'm not particularly focused on
-// long-term health" and "I'm unsure / I'd like advice" map to no flag.
-// Note: q21_Mobility and q21_ActivityParticipation aren't read by any
-// scoring function today (checked every line of calculateFoundationScore/
-// calculateLiftScore/calculateHybridScore/calculateHyroxScore) — derived
-// anyway so they're ready the moment something reads them.
-const Q21_OPTION_TO_FLAG = {
-  'Maintain/build strength & muscle': 'q21_Strength',
-  'Cardiovascular fitness & heart health': 'q21_Cardiovascular',
-  'Mobility & movement': 'q21_Mobility',
-  'Balance & physical confidence': 'q21_Balance',
-  'Remain active & independent as I get older': 'q21_Independence',
-  'Healthy weight & body composition': 'q21_BodyComposition',
-  'Continue enjoying hobbies, sport & activities': 'q21_ActivityParticipation',
-  'Reduce future pain or injury risk': 'q21_InjuryPrevention',
-};
-
-// Q22_Current_Activities categorization — the client has delegated this
-// categorization to us. Change this constant, not the derivation logic
-// below, if the categorization should change.
-const Q22_ACTIVITY_CATEGORIES = {
-  STRENGTH: ['Strength/weights'],
-  CARDIO: ['Running', 'Cycling', 'Swimming', 'Walking/hiking', 'Team/racket sports'],
-  NEITHER: ['Yoga/Pilates/mobility', 'Exercise classes', 'Other'],
-};
-
-// A null/undefined score means "unresolved" (e.g. a blank/unanswered
-// question), not zero. Sending undefined would make JSON.stringify drop
-// the field from the request entirely, leaving whatever value GHL already
-// had in place silently stale — so always send an explicit value instead.
-function valueOrUnresolved(value, unresolvedFallback = 'Unresolved') {
-  return value === null || value === undefined ? unresolvedFallback : value;
-}
-
-// A tier's recurring + one-off totals combined into the single number the
-// Package_*_Total NUMERICAL fields expect.
-function tierGrandTotal(tier) {
-  return tier.recurringMonthlyTotal + tier.oneOffTotal;
-}
+  buildAnswersAndGoalFields,
+  buildGoals,
+  deriveQ21Flags,
+  deriveQ22Flags,
+  deriveEventAndRiskFlags,
+  buildStaffOverrideFlags,
+  scalarAnswer,
+} = require('../lib/deriveFlags.js');
+const { writeAssessmentResultToGhl } = require('../lib/writeAssessmentResult.js');
 
 // GHL's webhook payload typically carries the contact id as "contact_id"
 // at the top level, alongside (not inside) "customData" — but check both
@@ -67,269 +26,6 @@ function resolveContactId(req, source) {
     (req.body.contact && req.body.contact.id) ||
     null
   );
-}
-
-// A field occasionally comes back as an array even for what should be a
-// single-answer question (Q7's GHL field is misconfigured as
-// MULTIPLE_OPTIONS) — take the first value in that case rather than
-// passing the whole array through to a scoreXXX lookup, which would never
-// match an array against a string key.
-function scalarAnswer(value) {
-  if (Array.isArray(value)) {
-    if (value.length > 1) {
-      console.warn('Answer field returned multiple values, using the first:', value);
-    }
-    return value[0];
-  }
-  return value;
-}
-
-// The 18 raw survey answers (Q3-Q20) plus the two goal fields, read
-// directly off the GHL contact rather than trusted from webhook merge
-// tags — those mappings have repeatedly been wrong or duplicated. A field
-// that's genuinely blank on the contact comes back as undefined here,
-// which flows straight through to answers.qN — the existing scoreXXX/
-// isUnresolved handling in index.js already treats that as unresolved
-// rather than guessing a score, so no special-casing is needed for it.
-function buildAnswersAndGoalFields(contact) {
-  const answers = {};
-  for (let q = 3; q <= 20; q++) {
-    const fieldId = GHL_SURVEY_ANSWER_FIELD_IDS[`q${q}`];
-    answers[`q${q}`] = scalarAnswer(getCustomFieldValue(contact, fieldId));
-  }
-
-  const q1Goal = scalarAnswer(getCustomFieldValue(contact, GHL_SURVEY_ANSWER_FIELD_IDS.q1Goal));
-  const q2Goals = getCustomFieldValue(contact, GHL_SURVEY_ANSWER_FIELD_IDS.q2Goals);
-  const q21Answer = getCustomFieldValue(contact, GHL_SURVEY_ANSWER_FIELD_IDS.q21);
-  const q22Answer = getCustomFieldValue(contact, GHL_SURVEY_ANSWER_FIELD_IDS.q22);
-
-  return { answers, q1Goal, q2Goals, q21Answer, q22Answer };
-}
-
-// flags.goals needs to be an array. Q1_Main_Goal is a single string;
-// Q2_Other_Goals is a genuine multi-select field in GHL and comes back as
-// an array already, but handle a comma-separated string too in case that
-// ever changes.
-function buildGoals(q1Goal, q2Goals) {
-  const goals = [];
-  const seen = new Set();
-  const addGoal = (goal) => {
-    if (typeof goal !== 'string') return;
-    const trimmed = goal.trim();
-    if (trimmed && !seen.has(trimmed)) {
-      seen.add(trimmed);
-      goals.push(trimmed);
-    }
-  };
-
-  addGoal(q1Goal);
-
-  if (Array.isArray(q2Goals)) {
-    q2Goals.forEach(addGoal);
-  } else if (typeof q2Goals === 'string' && q2Goals.trim()) {
-    q2Goals.split(',').forEach(addGoal);
-  }
-
-  return goals;
-}
-
-// Q21/Q22 are multi-select fields and normally come back as arrays, but
-// handle a comma-separated string too in case that ever changes.
-function toArray(value) {
-  if (Array.isArray(value)) return value;
-  if (typeof value === 'string' && value.trim()) {
-    return value.split(',').map((item) => item.trim());
-  }
-  return [];
-}
-
-function deriveQ21Flags(q21Answer) {
-  const selections = toArray(q21Answer);
-  const flags = {};
-  for (const flagName of Object.values(Q21_OPTION_TO_FLAG)) {
-    flags[flagName] = false;
-  }
-  selections.forEach((selection) => {
-    const flagName = Q21_OPTION_TO_FLAG[selection];
-    if (flagName) flags[flagName] = true;
-  });
-  return flags;
-}
-
-// Derives existing-exposure/training-gap flags from Q22, per the agreed
-// categorization: has strength but no cardio -> gap is CARDIO; has cardio
-// but no strength -> gap is STRENGTH; has both, or q22_None, -> NONE.
-// (Both-true isn't a gap; q22_None is a complete beginner, and applying
-// the MIXED modifier there would boost Hybrid by +3 and wrongly push a
-// beginner away from Foundation, so NONE is the safe default.)
-function deriveQ22Flags(q22Answer) {
-  const selections = toArray(q22Answer);
-  const q22_None = selections.includes('None currently');
-  const existingStrengthExposure = selections.some((s) => Q22_ACTIVITY_CATEGORIES.STRENGTH.includes(s));
-  const existingCardioExposure = selections.some((s) => Q22_ACTIVITY_CATEGORIES.CARDIO.includes(s));
-  const existingMixedTraining = existingStrengthExposure && existingCardioExposure;
-
-  let primaryTrainingGap = 'NONE';
-  if (!q22_None) {
-    if (existingStrengthExposure && !existingCardioExposure) primaryTrainingGap = 'CARDIO';
-    else if (existingCardioExposure && !existingStrengthExposure) primaryTrainingGap = 'STRENGTH';
-  }
-
-  return {
-    q22_None,
-    existingStrengthExposure,
-    existingCardioExposure,
-    existingMixedTraining,
-    // Mapped onto the camelCase properties the scoring functions actually
-    // read (checked every line of calculateFoundationScore/
-    // calculateLiftScore/calculateHybridScore):
-    regularStrengthTraining: existingStrengthExposure, // Foundation
-    existingStrengthCardioGap: existingStrengthExposure && !existingCardioExposure, // Hybrid
-    existingCardioStrengthGap: existingCardioExposure && !existingStrengthExposure, // Hybrid
-    // calculateLiftScore reads "strengthTrainingGap", not
-    // "existingCardioStrengthGap" - same underlying meaning (cardio
-    // exposure without strength exposure), but the naming mismatch meant
-    // Lift's own +3 signal never fired. Found in the full input audit;
-    // aliased here rather than renaming the Hybrid-facing property, to
-    // avoid touching Hybrid's own working wiring.
-    strengthTrainingGap: existingCardioExposure && !existingStrengthExposure, // Lift
-    strengthAndCardioRelevant: existingMixedTraining, // Hybrid
-    primaryTrainingGap,
-  };
-}
-
-// Q1/Q2 goal options and Q11/Q17 answers that correspond to flags read by
-// calculateGoalComplexity/calculateLiftScore/calculateHybridScore/
-// calculateHyroxScore, none of which were ever derived from real survey
-// data before this - found dormant in the full input audit alongside
-// Q17_Event_Detail, a free-text field ("tell us about your event") never
-// read anywhere before this either.
-//
-// Picklist answers (q11Answer/q17Answer) are compared by exact string,
-// not via index.js's dash-normalizing lookupAnswer/resolveAnswerForComparison
-// - those exist for values that might arrive as user-typed or
-// merge-tag-substituted text; a picklist selection read directly off the
-// GHL contact is always byte-identical to the configured option string,
-// so a plain trim is enough here.
-const HYROX_KEYWORD = /hyrox/i;
-
-function deriveEventAndRiskFlags(answers, q17DetailAnswer, goals, q21InjuryPrevention) {
-  const q17Answer = typeof answers.q17 === 'string' ? answers.q17.trim() : answers.q17;
-  const q11Answer = typeof answers.q11 === 'string' ? answers.q11.trim() : answers.q11;
-
-  const hasEventAnswer =
-    q17Answer === 'Yes – recreationally / for enjoyment' ||
-    q17Answer === 'Yes – specific event/race/target' ||
-    q17Answer === 'Yes – competition/performance is a significant priority';
-  const hasEventGoal = goals.includes('Prepare for a sport, event or physical challenge');
-
-  // Section 10's HYROX table lists "Specific HYROX goal +6" and "Q17
-  // specifically HYROX +4 additional" - the word "additional" means these
-  // are meant to stack (+10 total), not distinguish two different
-  // signals, so both use the same underlying check.
-  const mentionsHyrox =
-    HYROX_KEYWORD.test(String(q17DetailAnswer || '')) || goals.some((goal) => HYROX_KEYWORD.test(goal));
-
-  const wantsInjuryReduction =
-    goals.includes('Reduce the chance of pain or injury') ||
-    goals.includes('Reduce the chance of pain or injury affecting me'); // Q1/Q2 word this option differently
-
-  return {
-    longevityFocus: goals.includes('Stay fit, strong and independent as I get older'),
-    hasSportingPerformance: goals.includes('Improve my sporting performance'),
-    hasReturnToSport: goals.includes('Return to exercise or sport'),
-    eventOrCompetition: hasEventGoal || hasEventAnswer,
-    hasEvent: hasEventGoal || hasEventAnswer,
-    hasComplexPerformanceTarget: q17Answer === 'Yes – competition/performance is a significant priority',
-    hasRecurringIssue: q11Answer === 'It has returned more than once',
-    recurrencePrevention: q11Answer === "I'd like advice about reducing recurrence",
-    futureInjuryRisk:
-      q11Answer === 'I\'m concerned increasing exercise could make it worse' ||
-      Boolean(q21InjuryPrevention) ||
-      wantsInjuryReduction,
-    specificHyroxGoal: mentionsHyrox,
-    q17SpecificallyHyrox: mentionsHyrox,
-  };
-}
-
-async function updateGhlContact(contactId, result, answers, q21Answer, q22Answer, derivedFlags) {
-  // Include the raw answer inputs (Q3-Q20 plus the raw Q21/Q22
-  // selections) and every derived Q21/Q22 flag alongside the scored
-  // output, so Assessment_Raw_Response shows what came in, what was
-  // derived from it, and what was scored — useful for debugging a
-  // wrong-looking result without having to separately go find the
-  // contact's answers at the time.
-  const debugSnapshot = {
-    ...result,
-    rawAnswers: { ...answers, q21: q21Answer, q22: q22Answer },
-    derivedFlags,
-  };
-
-  const customFields = [
-    {
-      key: GHL_CUSTOM_FIELD_KEYS.classMatch,
-      fieldValue: result.classMatch.bestStartingMatch || result.classMatch.note,
-    },
-    {
-      key: GHL_CUSTOM_FIELD_KEYS.recommendedPackageSummary,
-      fieldValue: result.recommendedPackage.lineItems.map((item) => item.name).join(', '),
-    },
-    {
-      key: GHL_CUSTOM_FIELD_KEYS.recommendedPriceMonthly,
-      fieldValue: result.recommendedPackage.recurringMonthlyTotal,
-    },
-    {
-      key: GHL_CUSTOM_FIELD_KEYS.recommendedPriceOneOff,
-      fieldValue: result.recommendedPackage.oneOffTotal,
-    },
-    {
-      // PT_Need_Band is a fixed picklist in GHL (LOW/MODERATE/HIGH/VERY
-      // HIGH, no "Unresolved" option) — sending arbitrary text risks GHL
-      // rejecting the whole update, so clear it instead when unresolved.
-      key: GHL_CUSTOM_FIELD_KEYS.ptNeedBand,
-      fieldValue: valueOrUnresolved(result.ptNeed.band, ''),
-    },
-    {
-      // PT_Need_Score is a NUMERICAL field — same risk, so clear it with
-      // null instead of writing non-numeric text into it.
-      key: GHL_CUSTOM_FIELD_KEYS.ptNeedScore,
-      fieldValue: valueOrUnresolved(result.ptNeed.score, null),
-    },
-    {
-      // Package_Essential/Recommended/VIP_Total are NUMERICAL fields —
-      // one grand total per tier (recurring + one-off combined), same
-      // "clear with null when unresolved" handling as PT_Need_Score.
-      // The full per-tier line-item breakdown lives in
-      // Assessment_Raw_Response via debugSnapshot below (result.tieredPackages
-      // is already spread into it).
-      key: GHL_CUSTOM_FIELD_KEYS.packageEssentialTotal,
-      fieldValue: valueOrUnresolved(
-        tierGrandTotal(result.tieredPackages.essential),
-        null,
-      ),
-    },
-    {
-      key: GHL_CUSTOM_FIELD_KEYS.packageRecommendedTotal,
-      fieldValue: valueOrUnresolved(
-        tierGrandTotal(result.tieredPackages.recommended),
-        null,
-      ),
-    },
-    {
-      key: GHL_CUSTOM_FIELD_KEYS.packageVipTotal,
-      fieldValue: valueOrUnresolved(tierGrandTotal(result.tieredPackages.vip), null),
-    },
-    {
-      key: GHL_CUSTOM_FIELD_KEYS.assessmentRawResponse,
-      fieldValue: JSON.stringify(debugSnapshot),
-    },
-    {
-      key: GHL_CUSTOM_FIELD_KEYS.resultsPageUrl,
-      fieldValue: `${RESULTS_PAGE_BASE_URL}/results/${contactId}`,
-    },
-  ];
-
-  await updateGhlContactCustomFields(contactId, customFields);
 }
 
 export default async function handler(req, res) {
@@ -374,19 +70,15 @@ export default async function handler(req, res) {
       });
     }
 
-    const { answers, q1Goal, q2Goals, q21Answer, q22Answer } = buildAnswersAndGoalFields(contact);
-    const q17DetailAnswer = getCustomFieldValue(contact, GHL_SURVEY_ANSWER_FIELD_IDS.q17Detail);
-    const balancedTrainingNeedAnswer = getCustomFieldValue(
-      contact,
-      GHL_SURVEY_ANSWER_FIELD_IDS.balancedTrainingNeed,
-    );
+    const { answers, q1Goal, q2Goals, q21Answer, q22Answer, q17DetailAnswer, balancedTrainingNeedAnswer } =
+      buildAnswersAndGoalFields(contact);
 
-    // goals is now always the contact-derived value (previously kept
-    // whatever the webhook body sent if it happened to already be an
-    // array) - the flags derived below all need to agree with whatever
-    // goals the engine actually scores against, and the same "the contact
-    // record is correct, the webhook's merge tags are not" reasoning
-    // Q3-Q22 already rely on applies here too.
+    // goals is always the contact-derived value (previously kept whatever
+    // the webhook body sent if it happened to already be an array) - the
+    // flags derived below all need to agree with whatever goals the
+    // engine actually scores against, and the same "the contact record is
+    // correct, the webhook's merge tags are not" reasoning Q3-Q22 already
+    // rely on applies here too.
     const goals = buildGoals(q1Goal, q2Goals);
     const q21Flags = deriveQ21Flags(q21Answer);
     const q22Flags = deriveQ22Flags(q22Answer);
@@ -396,6 +88,12 @@ export default async function handler(req, res) {
       goals,
       q21Flags.q21_InjuryPrevention,
     );
+    // Brief section 21's four staff-only inputs - not survey questions,
+    // set on the contact from the staff page's "Staff Assessment" section.
+    // Read here too (not just on manual Recalculate) so a future survey
+    // resubmission still respects whatever staff already reviewed.
+    const staffOverrideFlags = buildStaffOverrideFlags(contact);
+
     const derivedFlags = {
       ...q21Flags,
       ...q22Flags,
@@ -404,6 +102,7 @@ export default async function handler(req, res) {
       // that it echoes its value as an array (["Yes"]), not a plain
       // string, the same shape scalarAnswer() already exists to unwrap.
       balancedTrainingNeed: scalarAnswer(balancedTrainingNeedAnswer) === 'Yes',
+      ...staffOverrideFlags,
     };
 
     // Other flags not derived above still come from the webhook body —
@@ -421,7 +120,7 @@ export default async function handler(req, res) {
       console.warn('Skipping GHL contact update: GHL_API_KEY is not set');
     } else {
       try {
-        await updateGhlContact(contactId, result, answers, q21Answer, q22Answer, derivedFlags);
+        await writeAssessmentResultToGhl(contactId, result, answers, q21Answer, q22Answer, derivedFlags);
       } catch (ghlError) {
         console.error('GHL contact update failed:', ghlError.message);
       }
