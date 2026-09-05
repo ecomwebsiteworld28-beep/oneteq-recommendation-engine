@@ -2748,4 +2748,5 @@ module.exports = {
   v3Catalogue,
   priceCatalogue,
   getPhysioPricing,
+  calculateV3PackageTotal,
 };
