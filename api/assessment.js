@@ -49,6 +49,12 @@ function valueOrUnresolved(value, unresolvedFallback = 'Unresolved') {
   return value === null || value === undefined ? unresolvedFallback : value;
 }
 
+// A tier's recurring + one-off totals combined into the single number the
+// Package_*_Total NUMERICAL fields expect.
+function tierGrandTotal(tier) {
+  return tier.recurringMonthlyTotal + tier.oneOffTotal;
+}
+
 // GHL's webhook payload typically carries the contact id as "contact_id"
 // at the top level, alongside (not inside) "customData" — but check both
 // locations, and both naming casings, to be safe.
@@ -227,6 +233,30 @@ async function updateGhlContact(contactId, result, answers, q21Answer, q22Answer
       // null instead of writing non-numeric text into it.
       key: GHL_CUSTOM_FIELD_KEYS.ptNeedScore,
       fieldValue: valueOrUnresolved(result.ptNeed.score, null),
+    },
+    {
+      // Package_Essential/Recommended/VIP_Total are NUMERICAL fields —
+      // one grand total per tier (recurring + one-off combined), same
+      // "clear with null when unresolved" handling as PT_Need_Score.
+      // The full per-tier line-item breakdown lives in
+      // Assessment_Raw_Response via debugSnapshot below (result.tieredPackages
+      // is already spread into it).
+      key: GHL_CUSTOM_FIELD_KEYS.packageEssentialTotal,
+      fieldValue: valueOrUnresolved(
+        tierGrandTotal(result.tieredPackages.essential),
+        null,
+      ),
+    },
+    {
+      key: GHL_CUSTOM_FIELD_KEYS.packageRecommendedTotal,
+      fieldValue: valueOrUnresolved(
+        tierGrandTotal(result.tieredPackages.recommended),
+        null,
+      ),
+    },
+    {
+      key: GHL_CUSTOM_FIELD_KEYS.packageVipTotal,
+      fieldValue: valueOrUnresolved(tierGrandTotal(result.tieredPackages.vip), null),
     },
     {
       key: GHL_CUSTOM_FIELD_KEYS.assessmentRawResponse,

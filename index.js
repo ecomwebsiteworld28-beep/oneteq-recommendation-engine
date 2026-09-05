@@ -1626,7 +1626,16 @@ console.log(
 // ===== MASTER ORCHESTRATOR FUNCTION =====
 // Takes raw answers, runs them through the entire engine, returns the full result
 
-function runFullAssessment(answers) {
+// PENDING CLIENT CONFIRMATION: clinicalBarrierToPrimaryGoal is derived from
+// Q10 (Current Clinical Impact) - true when the client says a clinical/pain
+// issue is currently affecting them at this level. Q10 asks directly
+// whether pain or injury is currently affecting their ability to exercise,
+// the closest existing signal to "a clinical barrier to the primary goal" -
+// but this exact mapping hasn't been confirmed against the brief's own
+// definition of that term yet.
+const CLINICAL_BARRIER_Q10_ANSWERS = ["Significantly", "Very significantly"];
+
+function runFullAssessment(answers, flags = {}) {
   // Step 1: Convert raw answers to scores
   const scores = {
     q3: scoreCurrentActivity(answers.q3),
@@ -1675,14 +1684,28 @@ function runFullAssessment(answers) {
   };
 
   // Step 4: Ancillary services
+  // clinicalBarrierToPrimaryGoal and isWeightBodyFatPrimaryGoal used to be
+  // read from answers.clinicalBarrierToPrimaryGoal/answers.isWeightBodyFatPrimaryGoal,
+  // but nothing has ever set those properties on the answers object (it
+  // only ever contains q3-q20), so both were always false in production.
+  // Derived properly now: the weight/body-fat one from the client's actual
+  // stated goals; the clinical one from Q10 (see CLINICAL_BARRIER_Q10_ANSWERS
+  // above - pending client confirmation).
+  const clinicalBarrierToPrimaryGoal = CLINICAL_BARRIER_Q10_ANSWERS.includes(
+    normalizeAnswer(answers.q10),
+  );
+  const isWeightBodyFatPrimaryGoal = (flags.goals || []).includes(
+    "Lose weight or reduce body fat",
+  );
+
   const services = {
     clinical: determineClinicalService(
       axes.clinicalSupport.score,
-      answers.clinicalBarrierToPrimaryGoal || false,
+      clinicalBarrierToPrimaryGoal,
     ),
     nutrition: determineNutritionLevel(
       axes.nutritionSupport.score,
-      answers.isWeightBodyFatPrimaryGoal || false,
+      isWeightBodyFatPrimaryGoal,
     ),
     recovery: determineRecoveryService(axes.recoverySupport.score),
   };
@@ -1722,7 +1745,7 @@ console.log(JSON.stringify(fullResultA, null, 2));
 // ===== EXTEND ORCHESTRATOR: ADD CLASS MATCHING + PT =====
 
 function runFullAssessmentComplete(answers, flags) {
-  const base = runFullAssessment(answers);
+  const base = runFullAssessment(answers, flags);
 
   // Class scoring needs goals + Q21/Q22 flags, passed in separately as "flags"
   const classScores = {
@@ -1901,52 +1924,17 @@ function buildRecommendedPackage(ptNeed, answers) {
 function runFullAssessmentWithPricing(answers, flags) {
   const complete = runFullAssessmentComplete(answers, flags);
   const packageResult = buildRecommendedPackage(complete.ptNeed, answers);
+  const tieredPackages = buildTieredPackages(complete, answers, flags);
 
-  return { ...complete, recommendedPackage: packageResult };
+  return { ...complete, recommendedPackage: packageResult, tieredPackages };
 }
 
-// Final end-to-end test: Worked Example A, all the way through to price
-const finalResultA = runFullAssessmentWithPricing(
-  {
-    q3: "3–4 times per week",
-    q4: "3 sessions per week",
-    q5: "2 sessions per week",
-    q6: "Fairly confident",
-    q7: "Quite confident",
-    q8: "Quite easy – usually consistent",
-    q9: "Occasional check-ins",
-    q10: "Not at all",
-    q11: "No",
-    q12: "Not applicable",
-    q13: "Moderately",
-    q14: "Quite confident",
-    q15: "Occasional guidance",
-    q16: "Slightly",
-    q17: "No",
-    q18: "Nice to know",
-    q19: "Quite well – occasional issues",
-    q20: "Occasional advice/support",
-  },
-  {
-    goals: [
-      "Improve my general health and fitness",
-      "Stay fit, strong and independent as I get older",
-    ],
-    longevityFocus: true,
-    q21_Cardiovascular: true,
-    q21_Independence: true,
-    balancedTrainingNeed: true,
-    preferredStyle: "MIXED",
-  },
-);
-
-console.log("\n=== FINAL END-TO-END TEST: ANSWERS -> PRICED PACKAGE ===");
-console.log("Class:", finalResultA.classMatch.bestStartingMatch);
-console.log("PT Band:", finalResultA.ptNeed.band);
-console.log(
-  "Recommended Package:",
-  JSON.stringify(finalResultA.recommendedPackage, null, 2),
-);
+// NOTE: the end-to-end test call for runFullAssessmentWithPricing lives
+// further down in this file (see "FINAL END-TO-END TEST" near the bottom),
+// not here - it now depends on v3Catalogue and the v3-based pricing
+// functions (getCoachingPricing/getNutritionPricing/getPhysioPricing,
+// calculateV3PackageTotal), all defined later in the file, so calling it
+// here would hit them before their const/function bodies are initialised.
 // ===== V3 PRICING CATALOGUE (EXPANDED - matches brief exactly) =====
 
 const v3Catalogue = {
@@ -2403,6 +2391,325 @@ console.log("But the OLD quote still shows:", quote1.items[0].priceAtQuote);
 console.log(
   "EXPECTED: old quote price stays 84, unaffected by the catalogue change to 95",
 );
+// ===== 30.10: THREE-TIER PACKAGE ASSEMBLY (Essential / Recommended / VIP) =====
+// Brief sections 14-16, stage 1 (engine only - the staff page rebuild is a
+// separate later stage). Produces Essential / Recommended / VIP alongside
+// the existing single recommendedPackage above, which is left untouched.
+//
+// Reuses everything already built for this rather than reinventing it:
+// getCoachingPricing/getNutritionPricing (30.3/30.4) for PT and nutrition,
+// assignPlanTiers (see "PLAN TIER ASSIGNMENT" above) for clinical/recovery/
+// testing placement - it already buckets services into
+// essentialPrerequisite/essentialCore/recommended/vip using exactly the
+// vocabulary determineClinicalService/determineRecoveryService/the VO2-RMR-
+// BodyComp functions produce, which is a strong signal it's the intended
+// classifier for this rather than something to duplicate. Its buckets are
+// mutually exclusive (single home per item); converted to cumulative tiers
+// below since VIP must contain everything Recommended has, plus more.
+// Nutrition is excluded from the assignPlanTiers call (passed a null level
+// so its cruder nutrition branch never fires) because getNutritionPricing
+// already supersedes it with an escalating, catalogue-aware map.
+
+// v3Catalogue-aware version of calculatePackageTotal (30.2's version only
+// knows the older priceCatalogue). getPhysioPricing is generic despite its
+// name - it falls back to catalogueItem.price whenever discountedPrice
+// isn't set - so it's reused here for every product, not just physio ones.
+function calculateV3PackageTotal(productIds, hasQualifyingMembershipOrCoaching) {
+  let recurringMonthlyTotal = 0;
+  let oneOffTotal = 0;
+  const lineItems = [];
+
+  for (const id of productIds) {
+    const catalogueItem = v3Catalogue[id];
+    if (!catalogueItem) continue;
+
+    const priced = getPhysioPricing(id, hasQualifyingMembershipOrCoaching);
+    lineItems.push({
+      productId: id,
+      name: priced.name,
+      price: priced.price,
+      billing: catalogueItem.billing,
+      discountApplied: priced.discountApplied,
+    });
+
+    if (catalogueItem.billing === "RECURRING_MONTHLY") {
+      recurringMonthlyTotal += priced.price;
+    } else if (catalogueItem.billing === "ONE_OFF") {
+      oneOffTotal += priced.price;
+    }
+  }
+
+  return { lineItems, recurringMonthlyTotal, oneOffTotal };
+}
+
+// Same set getPhysioPricing's discount is meant to qualify against,
+// mirrored from api/staff/[id].js's MEMBERSHIP_OR_COACHING_KEYS (that
+// file's own comment says it "matches the rule already defined in
+// index.js" - kept as an independent copy here rather than importing
+// across files, since the staff page rebuild is out of scope for this
+// stage and isn't touched by this change).
+const MEMBERSHIP_OR_ONGOING_COACHING_IDS = new Set([
+  "bronze_membership",
+  "silver_membership",
+  "gold_membership",
+  "platinum_membership",
+  "unlimited_membership",
+  "coaching_1x_week",
+  "coaching_2x_week",
+]);
+
+// assignPlanTiers returns human-readable service descriptions, not
+// catalogue product ids - this bridges the two for the clinical/testing
+// services it covers. Recovery is deliberately NOT in this map - see
+// deriveRecoveryVipIds below for why it's handled separately.
+const ANCILLARY_SERVICE_TO_PRODUCT_ID = {
+  "Clinical/Physio Assessment": "physio_initial",
+  "VO2/Metabolic Testing": "vo2_metabolic",
+  "RMR Testing": "rmr_test",
+  "Body Composition Baseline": "deep_dive",
+};
+
+// OPEN QUESTION FOR THE CLIENT - CONFLICT WITH BRIEF SECTION 13:
+// assignPlanTiers' own recovery branch (see "PLAN TIER ASSIGNMENT" above)
+// auto-maps sports_massage from three of the four possible recovery
+// statuses (REGULAR_SUPPORT_POTENTIALLY_RECOMMENDED and INDIVIDUAL_REVIEW
+// into "recommended", OCCASIONAL_ADVICE into "vip") - all three derived
+// purely from the Q19/Q20 score. Section 13 of the brief explicitly says a
+// high recovery score must never be auto-mapped to massage on its own, and
+// determineRecoveryService's own comment agrees ("Type is NOT auto-mapped
+// to massage from score alone - left for staff/further logic"). There is
+// no signal in the pipeline for *why* a recovery need exists (soreness a
+// massage would address vs. sleep/stress/lifestyle a massage wouldn't) -
+// only the score-derived status - so assignPlanTiers' recovery branch is
+// NOT reused here (recovery is passed to it as { status: null } so that
+// branch never fires).
+// Interim behaviour pending client confirmation: sports_massage - the only
+// recovery-category catalogue item - is surfaced only at VIP, only for the
+// single most severe band (INDIVIDUAL_REVIEW), and always as
+// VIP_IF_DESIRED rather than a firm Essential/Recommended inclusion. This
+// still technically ties a score to massage, just the highest one and only
+// as an optional, client-facing "if desired" suggestion rather than a
+// confident recommendation - it is NOT a resolution of the section 13
+// conflict, only the narrowest version of "keep sports_massage as the
+// mapping" that avoids stating a firm recommendation the brief prohibits.
+function deriveRecoveryVipIds(recovery) {
+  return recovery.status === "INDIVIDUAL_REVIEW" ? ["sports_massage"] : [];
+}
+
+function deriveAncillaryProductIds(services, testingServices) {
+  const buckets = assignPlanTiers({
+    clinical: services.clinical,
+    nutrition: { level: null, status: undefined },
+    recovery: { status: null }, // see deriveRecoveryVipIds above
+    vo2: testingServices.vo2,
+    rmr: testingServices.rmr,
+    bodyComp: testingServices.bodyComp,
+  });
+
+  const toProductIds = (bucket) =>
+    bucket.map((entry) => ANCILLARY_SERVICE_TO_PRODUCT_ID[entry.service]).filter(Boolean);
+
+  const prerequisiteIds = toProductIds(buckets.essentialPrerequisite);
+  const recommendedOnlyIds = toProductIds(buckets.recommended);
+  const vipOnlyIds = [...toProductIds(buckets.vip), ...deriveRecoveryVipIds(services.recovery)];
+
+  // Deep Dive replaces plain VO2/Metabolic testing when both would
+  // otherwise land in the same tier - getTestingRecommendations' own
+  // "non-stacking" rule (30.6) - applied here as a de-dup pass on top of
+  // assignPlanTiers' placement rather than re-deriving it from scratch.
+  const dedupeVo2DeepDive = (ids) =>
+    ids.includes("deep_dive") ? ids.filter((id) => id !== "vo2_metabolic") : ids;
+
+  return {
+    essentialIds: dedupeVo2DeepDive([...prerequisiteIds]),
+    recommendedIds: dedupeVo2DeepDive([...prerequisiteIds, ...recommendedOnlyIds]),
+    vipIds: dedupeVo2DeepDive([...prerequisiteIds, ...recommendedOnlyIds, ...vipOnlyIds]),
+  };
+}
+
+// VO2/RMR/Body Composition were fully built (see "VO2/METABOLIC, RMR, BODY
+// COMPOSITION SERVICES" above) but never fed real inputs anywhere - wired
+// up here from data already flowing through the pipeline.
+function deriveTestingServices(complete, flags) {
+  const goals = flags.goals || [];
+  const hasEnduranceCardioGoal = goals.includes(
+    "Improve my cardiovascular fitness or endurance",
+  );
+  const significantWeightBodyCompGoal = goals.includes(
+    "Lose weight or reduce body fat",
+  );
+  const highPerformanceFocus =
+    !isUnresolved(complete.axes.performanceFocus.score) &&
+    complete.axes.performanceFocus.score >= 8;
+  const highDataInterest =
+    !isUnresolved(complete.rawScores.q18) && complete.rawScores.q18 >= 6;
+  const hasHyroxOrEnduranceGoal =
+    complete.classMatch.bestStartingMatch === "hyrox" || hasEnduranceCardioGoal;
+
+  const vo2 = determineVO2MetabolicService({
+    hasEnduranceCardioGoal,
+    hasEvent: flags.eventOrCompetition || false,
+    highPerformanceFocus,
+    highDataInterest,
+    hasHyroxOrEnduranceGoal,
+  });
+  const rmr = determineRMRService({
+    significantWeightBodyCompGoal,
+    nutritionRelevance: complete.rawScores.q13,
+    objectiveDataInterest: complete.rawScores.q18,
+  });
+  const bodyComp = determineBodyCompositionService({
+    bodyCompositionImportant: significantWeightBodyCompGoal,
+    valuesMeasurableData: highDataInterest,
+  });
+
+  return { vo2, rmr, bodyComp };
+}
+
+// The one VIP addition classified as a genuine need-driven enhancement
+// rather than a preference - getCoachingPricing's own comment already
+// frames the HIGH/VERY HIGH band's VIP upgrade this way ("1x/week ->
+// 2x/week"). Every other VIP-only addition is a preference, so it's
+// VIP_IF_DESIRED and must carry the client-facing "If Desired" label.
+const VIP_ENHANCEMENT_NEEDED_PRODUCT_IDS = new Set(["coaching_2x_week"]);
+
+function buildTieredPackages(complete, answers, flags) {
+  const { axes, services, ptNeed } = complete;
+  const isWeightBodyFatPrimaryGoal = (flags.goals || []).includes(
+    "Lose weight or reduce body fat",
+  );
+  const testingServices = deriveTestingServices(complete, flags);
+  const ancillaryIds = deriveAncillaryProductIds(services, testingServices);
+
+  const membershipTier = lookupAnswer(Q5_FREQUENCY_TO_MEMBERSHIP_TIER, answers.q5);
+  const membershipUnresolved = !membershipTier;
+  const membershipItem = membershipTier ? [membershipTier] : [];
+
+  const productIdsForTier = (tier, ancillaryIdsForTier) => [
+    ...membershipItem,
+    ...getCoachingPricing(ptNeed.band, tier),
+    ...(services.nutrition.level
+      ? getNutritionPricing(
+          services.nutrition.level,
+          tier,
+          isWeightBodyFatPrimaryGoal,
+          axes.nutritionSupport.score,
+        )
+      : []),
+    ...ancillaryIdsForTier,
+  ];
+
+  const priceTier = (productIds) => {
+    const hasQualifyingMembershipOrCoaching = productIds.some((id) =>
+      MEMBERSHIP_OR_ONGOING_COACHING_IDS.has(id),
+    );
+    return {
+      ...calculateV3PackageTotal(productIds, hasQualifyingMembershipOrCoaching),
+      membershipUnresolved,
+    };
+  };
+
+  const essentialProductIds = productIdsForTier("essential", ancillaryIds.essentialIds);
+  const recommendedProductIds = productIdsForTier("recommended", ancillaryIds.recommendedIds);
+  const vipProductIds = productIdsForTier("vip", ancillaryIds.vipIds);
+
+  const essential = priceTier(essentialProductIds);
+  const recommended = priceTier(recommendedProductIds);
+  const vip = priceTier(vipProductIds);
+
+  // Label VIP-only additions (relative to Recommended) with their
+  // classification, for the client-facing "If Desired" requirement.
+  // Irrelevant services are never added just to inflate VIP - every VIP
+  // line item traces back to either a real ancillary-service signal
+  // (via deriveAncillaryProductIds) or getCoachingPricing's own
+  // need-driven/preference-led product choices, never invented here.
+  const recommendedProductIdSet = new Set(recommendedProductIds);
+  vip.lineItems = vip.lineItems.map((item) => {
+    if (recommendedProductIdSet.has(item.productId)) return item;
+    const vipType = VIP_ENHANCEMENT_NEEDED_PRODUCT_IDS.has(item.productId)
+      ? "VIP_ENHANCEMENT_NEEDED"
+      : "VIP_IF_DESIRED";
+    return {
+      ...item,
+      vipType,
+      vipLabel: vipType === "VIP_IF_DESIRED" ? "If Desired" : undefined,
+    };
+  });
+
+  // VIP must never total less than Recommended, and Recommended must never
+  // total less than Essential - each tier is built as "the one below, plus
+  // enhancements," so this should hold by construction, but a VIP package
+  // priced below Recommended in front of a client would be embarrassing,
+  // so this is checked rather than trusted.
+  const grandTotal = (tier) => tier.recurringMonthlyTotal + tier.oneOffTotal;
+  const essentialGrandTotal = grandTotal(essential);
+  const recommendedGrandTotal = grandTotal(recommended);
+  const vipGrandTotal = grandTotal(vip);
+
+  if (recommendedGrandTotal < essentialGrandTotal) {
+    throw new Error(
+      `Recommended package total (${recommendedGrandTotal}) is less than Essential's (${essentialGrandTotal}) - tiers must never shrink going up.`,
+    );
+  }
+  if (vipGrandTotal < recommendedGrandTotal) {
+    throw new Error(
+      `VIP package total (${vipGrandTotal}) is less than Recommended's (${recommendedGrandTotal}) - tiers must never shrink going up.`,
+    );
+  }
+
+  return { essential, recommended, vip };
+}
+
+// Final end-to-end test: Worked Example A, all the way through to price -
+// moved here (was originally right after runFullAssessmentWithPricing's
+// own definition) because it now needs v3Catalogue and the v3-based
+// pricing functions above, which aren't initialised yet up there.
+const finalResultA = runFullAssessmentWithPricing(
+  {
+    q3: "3–4 times per week",
+    q4: "3 sessions per week",
+    q5: "2 sessions per week",
+    q6: "Fairly confident",
+    q7: "Quite confident",
+    q8: "Quite easy – usually consistent",
+    q9: "Occasional check-ins",
+    q10: "Not at all",
+    q11: "No",
+    q12: "Not applicable",
+    q13: "Moderately",
+    q14: "Quite confident",
+    q15: "Occasional guidance",
+    q16: "Slightly",
+    q17: "No",
+    q18: "Nice to know",
+    q19: "Quite well – occasional issues",
+    q20: "Occasional advice/support",
+  },
+  {
+    goals: [
+      "Improve my general health and fitness",
+      "Stay fit, strong and independent as I get older",
+    ],
+    longevityFocus: true,
+    q21_Cardiovascular: true,
+    q21_Independence: true,
+    balancedTrainingNeed: true,
+    preferredStyle: "MIXED",
+  },
+);
+
+console.log("\n=== FINAL END-TO-END TEST: ANSWERS -> PRICED PACKAGE ===");
+console.log("Class:", finalResultA.classMatch.bestStartingMatch);
+console.log("PT Band:", finalResultA.ptNeed.band);
+console.log(
+  "Recommended Package:",
+  JSON.stringify(finalResultA.recommendedPackage, null, 2),
+);
+console.log(
+  "Tiered Packages:",
+  JSON.stringify(finalResultA.tieredPackages, null, 2),
+);
+
 module.exports = {
   runFullAssessmentComplete,
   runFullAssessmentWithPricing,
