@@ -186,8 +186,69 @@ function deriveQ22Flags(q22Answer) {
     regularStrengthTraining: existingStrengthExposure, // Foundation
     existingStrengthCardioGap: existingStrengthExposure && !existingCardioExposure, // Hybrid
     existingCardioStrengthGap: existingCardioExposure && !existingStrengthExposure, // Hybrid
+    // calculateLiftScore reads "strengthTrainingGap", not
+    // "existingCardioStrengthGap" - same underlying meaning (cardio
+    // exposure without strength exposure), but the naming mismatch meant
+    // Lift's own +3 signal never fired. Found in the full input audit;
+    // aliased here rather than renaming the Hybrid-facing property, to
+    // avoid touching Hybrid's own working wiring.
+    strengthTrainingGap: existingCardioExposure && !existingStrengthExposure, // Lift
     strengthAndCardioRelevant: existingMixedTraining, // Hybrid
     primaryTrainingGap,
+  };
+}
+
+// Q1/Q2 goal options and Q11/Q17 answers that correspond to flags read by
+// calculateGoalComplexity/calculateLiftScore/calculateHybridScore/
+// calculateHyroxScore, none of which were ever derived from real survey
+// data before this - found dormant in the full input audit alongside
+// Q17_Event_Detail, a free-text field ("tell us about your event") never
+// read anywhere before this either.
+//
+// Picklist answers (q11Answer/q17Answer) are compared by exact string,
+// not via index.js's dash-normalizing lookupAnswer/resolveAnswerForComparison
+// - those exist for values that might arrive as user-typed or
+// merge-tag-substituted text; a picklist selection read directly off the
+// GHL contact is always byte-identical to the configured option string,
+// so a plain trim is enough here.
+const HYROX_KEYWORD = /hyrox/i;
+
+function deriveEventAndRiskFlags(answers, q17DetailAnswer, goals, q21InjuryPrevention) {
+  const q17Answer = typeof answers.q17 === 'string' ? answers.q17.trim() : answers.q17;
+  const q11Answer = typeof answers.q11 === 'string' ? answers.q11.trim() : answers.q11;
+
+  const hasEventAnswer =
+    q17Answer === 'Yes – recreationally / for enjoyment' ||
+    q17Answer === 'Yes – specific event/race/target' ||
+    q17Answer === 'Yes – competition/performance is a significant priority';
+  const hasEventGoal = goals.includes('Prepare for a sport, event or physical challenge');
+
+  // Section 10's HYROX table lists "Specific HYROX goal +6" and "Q17
+  // specifically HYROX +4 additional" - the word "additional" means these
+  // are meant to stack (+10 total), not distinguish two different
+  // signals, so both use the same underlying check.
+  const mentionsHyrox =
+    HYROX_KEYWORD.test(String(q17DetailAnswer || '')) || goals.some((goal) => HYROX_KEYWORD.test(goal));
+
+  const wantsInjuryReduction =
+    goals.includes('Reduce the chance of pain or injury') ||
+    goals.includes('Reduce the chance of pain or injury affecting me'); // Q1/Q2 word this option differently
+
+  return {
+    longevityFocus: goals.includes('Stay fit, strong and independent as I get older'),
+    hasSportingPerformance: goals.includes('Improve my sporting performance'),
+    hasReturnToSport: goals.includes('Return to exercise or sport'),
+    eventOrCompetition: hasEventGoal || hasEventAnswer,
+    hasEvent: hasEventGoal || hasEventAnswer,
+    hasComplexPerformanceTarget: q17Answer === 'Yes – competition/performance is a significant priority',
+    hasRecurringIssue: q11Answer === 'It has returned more than once',
+    recurrencePrevention: q11Answer === "I'd like advice about reducing recurrence",
+    futureInjuryRisk:
+      q11Answer === 'I\'m concerned increasing exercise could make it worse' ||
+      Boolean(q21InjuryPrevention) ||
+      wantsInjuryReduction,
+    specificHyroxGoal: mentionsHyrox,
+    q17SpecificallyHyrox: mentionsHyrox,
   };
 }
 
@@ -314,16 +375,38 @@ export default async function handler(req, res) {
     }
 
     const { answers, q1Goal, q2Goals, q21Answer, q22Answer } = buildAnswersAndGoalFields(contact);
-    const derivedFlags = { ...deriveQ21Flags(q21Answer), ...deriveQ22Flags(q22Answer) };
+    const q17DetailAnswer = getCustomFieldValue(contact, GHL_SURVEY_ANSWER_FIELD_IDS.q17Detail);
+    const balancedTrainingNeedAnswer = getCustomFieldValue(
+      contact,
+      GHL_SURVEY_ANSWER_FIELD_IDS.balancedTrainingNeed,
+    );
 
-    // Other flags (longevityFocus, preferredStyle, etc.) still come from
-    // the webhook body — only goals and the Q21/Q22-derived flags moved to
-    // being read from the contact. Derived flags take precedence over
-    // anything with the same name in the webhook body.
-    let flags = source.flags || {};
-    if (!Array.isArray(flags.goals)) {
-      flags = { ...flags, goals: buildGoals(q1Goal, q2Goals) };
-    }
+    // goals is now always the contact-derived value (previously kept
+    // whatever the webhook body sent if it happened to already be an
+    // array) - the flags derived below all need to agree with whatever
+    // goals the engine actually scores against, and the same "the contact
+    // record is correct, the webhook's merge tags are not" reasoning
+    // Q3-Q22 already rely on applies here too.
+    const goals = buildGoals(q1Goal, q2Goals);
+    const q21Flags = deriveQ21Flags(q21Answer);
+    const q22Flags = deriveQ22Flags(q22Answer);
+    const eventAndRiskFlags = deriveEventAndRiskFlags(
+      answers,
+      q17DetailAnswer,
+      goals,
+      q21Flags.q21_InjuryPrevention,
+    );
+    const derivedFlags = {
+      ...q21Flags,
+      ...q22Flags,
+      ...eventAndRiskFlags,
+      balancedTrainingNeed: balancedTrainingNeedAnswer === 'Yes',
+    };
+
+    // Other flags not derived above still come from the webhook body —
+    // goals and every derived flag take precedence over anything with the
+    // same name there.
+    let flags = { ...(source.flags || {}), goals };
     flags = { ...flags, ...derivedFlags };
 
     const result = runFullAssessmentWithPricing(answers, flags);
