@@ -400,7 +400,10 @@ export default async function handler(req, res) {
       ...q21Flags,
       ...q22Flags,
       ...eventAndRiskFlags,
-      balancedTrainingNeed: balancedTrainingNeedAnswer === 'Yes',
+      // Balanced_Training_Need is a GHL CHECKBOX field - confirmed live
+      // that it echoes its value as an array (["Yes"]), not a plain
+      // string, the same shape scalarAnswer() already exists to unwrap.
+      balancedTrainingNeed: scalarAnswer(balancedTrainingNeedAnswer) === 'Yes',
     };
 
     // Other flags not derived above still come from the webhook body —
