@@ -1056,8 +1056,25 @@ function determineVO2MetabolicService(inputs) {
   return { level, status, strongSignals };
 }
 
+// BUG FOUND ON A REAL SUBMISSION (contact ZXzd4DoraKDkLFOgiG72): a client
+// with goals=["Lose weight or reduce body fat"], Q13 (nutrition relevance)
+// "Slightly" (score 3) and Q18 (objective data interest) "Nice to know"
+// (score 2) got BOTH RMR and Deep Dive into VIP. Both functions below used
+// to treat significantWeightBodyCompGoal/bodyCompositionImportant as
+// sufficient on its own for MODERATE ("relevanceCount >= 1" / a plain OR),
+// so the weight-loss goal alone triggered both, with zero corroboration
+// from either data-relevant question - both of which were explicitly low,
+// not just unresolved. That's exactly the "irrelevant service added just
+// to make VIP bigger" case brief section 14 warns against: RMR and Deep
+// Dive are both objective-measurement products, and a client who has
+// explicitly told us (via Q18) that this kind of data isn't important to
+// them shouldn't have either recommended off a goal flag alone.
+// explicitLowDataInterest = Q18 answered at the bottom of its scale ("Not
+// important"=0/"Nice to know"=2), not merely unresolved - genuinely not
+// knowing (blank Q18) still allows a goal alone to reach MODERATE; being
+// told "no" does not.
 function determineRMRService(inputs) {
-  // inputs: significantWeightBodyCompGoal, nutritionRelevance, objectiveDataInterest
+  // inputs: significantWeightBodyCompGoal, nutritionRelevance, objectiveDataInterest, explicitLowDataInterest
   let relevanceCount = 0;
   if (inputs.significantWeightBodyCompGoal) relevanceCount++;
   if (!isUnresolved(inputs.nutritionRelevance) && inputs.nutritionRelevance >= 6)
@@ -1078,6 +1095,11 @@ function determineRMRService(inputs) {
     inputs.objectiveDataInterest >= 6
   ) {
     level = "HIGH";
+  } else if (inputs.explicitLowDataInterest) {
+    // Can never reach here from the HIGH branch above (that requires
+    // objectiveDataInterest >= 6, this requires it explicitly low), so
+    // this only ever downgrades an otherwise-MODERATE result.
+    level = "LOW";
   } else if (relevanceCount >= 1) {
     level = "MODERATE";
   } else {
@@ -1093,10 +1115,12 @@ function determineRMRService(inputs) {
 }
 
 function determineBodyCompositionService(inputs) {
-  // inputs: bodyCompositionImportant, valuesMeasurableData
+  // inputs: bodyCompositionImportant, valuesMeasurableData, explicitLowDataInterest
   let level;
   if (inputs.bodyCompositionImportant && inputs.valuesMeasurableData) {
     level = "HIGH";
+  } else if (inputs.explicitLowDataInterest) {
+    level = "LOW";
   } else if (inputs.bodyCompositionImportant || inputs.valuesMeasurableData) {
     level = "MODERATE";
   } else {
@@ -2543,6 +2567,12 @@ function deriveTestingServices(complete, flags) {
     complete.axes.performanceFocus.score >= 8;
   const highDataInterest =
     !isUnresolved(complete.rawScores.q18) && complete.rawScores.q18 >= 6;
+  // Q18 answered at the bottom of its scale ("Not important"=0/"Nice to
+  // know"=2) - the client has actively told us objective data isn't
+  // important to them, not merely left it unresolved. Gates RMR/Body
+  // Composition below - see the comment on determineRMRService.
+  const explicitLowDataInterest =
+    !isUnresolved(complete.rawScores.q18) && complete.rawScores.q18 <= 2;
   const hasHyroxOrEnduranceGoal =
     complete.classMatch.bestStartingMatch === "hyrox" || hasEnduranceCardioGoal;
 
@@ -2557,10 +2587,12 @@ function deriveTestingServices(complete, flags) {
     significantWeightBodyCompGoal,
     nutritionRelevance: complete.rawScores.q13,
     objectiveDataInterest: complete.rawScores.q18,
+    explicitLowDataInterest,
   });
   const bodyComp = determineBodyCompositionService({
     bodyCompositionImportant: significantWeightBodyCompGoal,
     valuesMeasurableData: highDataInterest,
+    explicitLowDataInterest,
   });
 
   return { vo2, rmr, bodyComp };
