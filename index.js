@@ -1335,7 +1335,12 @@ function getPrice(productId) {
   return { name: product.name, price: product.price, billing: product.billing };
 }
 
-function calculatePackageTotal(productIds) {
+// suggestedProductIds (optional) marks specific line items as provisional
+// - e.g. a membership tier suggested from Q4/Q3 rather than a resolved
+// Q5 answer - without changing the shape for every existing caller that
+// omits it.
+function calculatePackageTotal(productIds, suggestedProductIds) {
+  suggestedProductIds = suggestedProductIds || new Set();
   let recurringMonthlyTotal = 0;
   let oneOffTotal = 0;
   const lineItems = [];
@@ -1348,6 +1353,7 @@ function calculatePackageTotal(productIds) {
       name: product.name,
       price: product.price,
       billing: product.billing,
+      ...(suggestedProductIds.has(id) ? { suggested: true } : {}),
     });
 
     if (product.billing === "RECURRING_MONTHLY") {
@@ -1928,13 +1934,82 @@ const Q5_FREQUENCY_TO_MEMBERSHIP_TIER = {
   "I'd like you to recommend this": null,
 };
 
+// Client-approved change: when Q5 itself is unresolved (a genuine punt
+// like "I'd like you to recommend this", or blank), suggest a
+// provisional starting tier instead of adding nothing - membershipUnresolved
+// still means exactly what it did before (Q5 wasn't answered), this is a
+// separate, additive signal. Derived only from what's already known:
+// Q4 (desired total training frequency) first, since it directly asks
+// about desired frequency the same way Q5 does; Q3 (current activity)
+// only as a fallback when Q4 is ALSO unresolved, since Q3 reflects
+// current behaviour rather than desired ONETEQ frequency - a weaker,
+// indirect signal.
+//
+// Q4's own answer options map onto the same tier ceiling Q5 itself would
+// ever produce (Q5 never suggests above platinum either, and never
+// unlimited) - "never suggest above what Q4 indicates" falls out of this
+// mapping directly rather than needing a separate cap.
+const Q4_FREQUENCY_TO_SUGGESTED_TIER = {
+  "1 session per week": "bronze_membership",
+  "2 sessions per week": "silver_membership",
+  "3 sessions per week": "gold_membership",
+  "4 sessions per week": "platinum_membership",
+  "5+ sessions per week": "platinum_membership",
+};
+
+// Q3 fallback is deliberately capped at silver (never gold/platinum) -
+// "when in doubt, suggest the lower tier." Current activity level,
+// however high, doesn't confirm the client wants that much specifically
+// at ONETEQ, so this stays conservative even for the most active answers.
+const Q3_ACTIVITY_TO_SUGGESTED_TIER = {
+  "Very little or no structured exercise": "bronze_membership",
+  "Some activity, but inconsistent": "bronze_membership",
+  "1–2 times per week": "bronze_membership",
+  "3–4 times per week": "silver_membership",
+  "5+ times per week": "silver_membership",
+};
+
+// Returns null when both Q4 and Q3 are unresolved - falls back to the
+// original "no membership at all" behaviour in that case, per the
+// client's explicit instruction.
+function deriveSuggestedMembershipTier(answers) {
+  const q4Tier = lookupAnswer(Q4_FREQUENCY_TO_SUGGESTED_TIER, answers.q4);
+  if (q4Tier) {
+    return {
+      tier: q4Tier,
+      suggestionBasis: `Q4 (desired total training frequency): "${normalizeAnswer(answers.q4)}"`,
+    };
+  }
+
+  const q3Tier = lookupAnswer(Q3_ACTIVITY_TO_SUGGESTED_TIER, answers.q3);
+  if (q3Tier) {
+    return {
+      tier: q3Tier,
+      suggestionBasis: `Q4 unresolved - estimated from Q3 (current activity level): "${normalizeAnswer(answers.q3)}"`,
+    };
+  }
+
+  return null;
+}
+
 function buildRecommendedPackage(ptNeed, answers) {
   const productIds = [];
+  const suggestedProductIds = new Set();
+  let membershipSuggested = false;
+  let suggestionBasis = null;
 
   const membershipTier = lookupAnswer(Q5_FREQUENCY_TO_MEMBERSHIP_TIER, answers.q5);
   const membershipUnresolved = !membershipTier;
   if (membershipTier) {
     productIds.push(membershipTier);
+  } else {
+    const suggestion = deriveSuggestedMembershipTier(answers);
+    if (suggestion) {
+      productIds.push(suggestion.tier);
+      suggestedProductIds.add(suggestion.tier);
+      membershipSuggested = true;
+      suggestionBasis = suggestion.suggestionBasis;
+    }
   }
 
   // Add PT/coaching based on need band
@@ -1947,8 +2022,8 @@ function buildRecommendedPackage(ptNeed, answers) {
   }
   // LOW band = no PT added automatically
 
-  const packageResult = calculatePackageTotal(productIds);
-  return { ...packageResult, membershipUnresolved };
+  const packageResult = calculatePackageTotal(productIds, suggestedProductIds);
+  return { ...packageResult, membershipUnresolved, membershipSuggested, suggestionBasis };
 }
 
 function runFullAssessmentWithPricing(answers, flags) {
@@ -2444,7 +2519,8 @@ console.log(
 // knows the older priceCatalogue). getPhysioPricing is generic despite its
 // name - it falls back to catalogueItem.price whenever discountedPrice
 // isn't set - so it's reused here for every product, not just physio ones.
-function calculateV3PackageTotal(productIds, hasQualifyingMembershipOrCoaching) {
+function calculateV3PackageTotal(productIds, hasQualifyingMembershipOrCoaching, suggestedProductIds) {
+  suggestedProductIds = suggestedProductIds || new Set();
   let recurringMonthlyTotal = 0;
   let oneOffTotal = 0;
   const lineItems = [];
@@ -2460,6 +2536,7 @@ function calculateV3PackageTotal(productIds, hasQualifyingMembershipOrCoaching) 
       price: priced.price,
       billing: catalogueItem.billing,
       discountApplied: priced.discountApplied,
+      ...(suggestedProductIds.has(id) ? { suggested: true } : {}),
     });
 
     if (catalogueItem.billing === "RECURRING_MONTHLY") {
@@ -2657,7 +2734,22 @@ function buildTieredPackages(complete, answers, flags) {
 
   const membershipTier = lookupAnswer(Q5_FREQUENCY_TO_MEMBERSHIP_TIER, answers.q5);
   const membershipUnresolved = !membershipTier;
-  const membershipItem = membershipTier ? [membershipTier] : [];
+  const suggestedProductIds = new Set();
+  let membershipSuggested = false;
+  let suggestionBasis = null;
+  let membershipItem = [];
+
+  if (membershipTier) {
+    membershipItem = [membershipTier];
+  } else {
+    const suggestion = deriveSuggestedMembershipTier(answers);
+    if (suggestion) {
+      membershipItem = [suggestion.tier];
+      suggestedProductIds.add(suggestion.tier);
+      membershipSuggested = true;
+      suggestionBasis = suggestion.suggestionBasis;
+    }
+  }
 
   const productIdsForTier = (tier, ancillaryIdsForTier) => {
     let coachingIds = getCoachingPricing(ptNeed.band, tier);
@@ -2684,8 +2776,10 @@ function buildTieredPackages(complete, answers, flags) {
       MEMBERSHIP_OR_ONGOING_COACHING_IDS.has(id),
     );
     return {
-      ...calculateV3PackageTotal(productIds, hasQualifyingMembershipOrCoaching),
+      ...calculateV3PackageTotal(productIds, hasQualifyingMembershipOrCoaching, suggestedProductIds),
       membershipUnresolved,
+      membershipSuggested,
+      suggestionBasis,
     };
   };
 

@@ -277,11 +277,22 @@ function buildComponentsFromTier(tier) {
   const nutritionLevel =
     NUTRITION_LEVEL_OPTIONS.map((o) => o.key).find((key) => key !== 'none' && has(key)) || 'none';
 
+  // A suggested membership (Q5 was unresolved - see
+  // deriveSuggestedMembershipTier in index.js) is a provisional starting
+  // point, not a resolved recommendation - defaults to "deferred" rather
+  // than "accepted" even though it's present in the tier, the same way a
+  // VIP-only addition defaults to deferred: it needs a decision, not a
+  // silent accept.
+  const membershipIsSuggested = membershipLevel !== 'none' && Boolean(byId[membershipLevel]?.suggested);
+
   const components = {
     membership: {
-      status: deriveComponentStatus(byId, membershipLevel === 'none' ? [] : [membershipLevel]),
+      status: membershipIsSuggested
+        ? 'deferred'
+        : deriveComponentStatus(byId, membershipLevel === 'none' ? [] : [membershipLevel]),
       level: membershipLevel,
       ifDesired: membershipLevel !== 'none' && isIfDesired(membershipLevel),
+      suggested: membershipIsSuggested,
     },
     // coachingInitial (initial_assessment) is handled by the generic
     // toggle loop below — its status depends only on itself now, not on
@@ -470,7 +481,9 @@ function renderComponentRow(def, state) {
   let controlsHtml = '';
 
   if (def.kind === 'membership') {
-    controlsHtml = `<select data-membership-level>${optionsHtml(MEMBERSHIP_OPTIONS, state.level)}</select>`;
+    controlsHtml = `
+      <select data-membership-level>${optionsHtml(MEMBERSHIP_OPTIONS, state.level)}</select>
+      <span id="membership-suggested-badge" class="suggested-badge" ${state.suggested ? '' : 'hidden'}>Suggested — to be confirmed</span>`;
   } else if (def.kind === 'frequency') {
     controlsHtml = `<select data-frequency-value="${escapeHtml(def.id)}">${optionsHtml(def.options, state.value)}</select>`;
   } else if (def.kind === 'nutrition') {
@@ -523,6 +536,7 @@ function renderTierCard(name, label, tier, highlighted) {
       <div class="tier-card-name">${escapeHtml(label)}</div>
       <div class="tier-card-price">${formatMoney(tier.recurringMonthlyTotal)}<span>/mo</span></div>
       <div class="tier-card-oneoff">+ ${formatMoney(tier.oneOffTotal)} one-off</div>
+      ${tier.membershipSuggested ? '<div class="tier-card-suggested-note">Membership: suggested, not confirmed</div>' : ''}
       <button type="button" class="load-tier-btn" data-load-tier="${escapeHtml(name)}">Load this tier</button>
     </div>`;
 }
@@ -587,6 +601,8 @@ function renderUnlockedPage(contact, result, id) {
       .tri-state-btn.active.tri-state-declined { background: #dc2626; border-color: #dc2626; color: #fff; }
       .tri-state-btn.active.tri-state-deferred { background: #f59e0b; border-color: #f59e0b; color: #fff; }
       .if-desired { font-size: 0.8rem; color: #64748b; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+      .suggested-badge { display: inline-block; padding: 2px 8px; background: #f59e0b; color: #fff; border-radius: 999px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap; }
+      .tier-card-suggested-note { margin-top: 6px; font-size: 0.72rem; color: #b45309; font-weight: 600; }
       .agreed-plan { margin-top: 24px; padding: 16px; background: #f8fafc; border-top: 1px solid #e2e8f0; border-radius: 0 0 12px 12px; }
       .agreed-plan-totals { font-size: 0.95rem; }
       .agreed-plan-totals strong { font-size: 1.2rem; }
@@ -837,6 +853,7 @@ function renderUnlockedPage(contact, result, id) {
         applyTriState(membershipRow, components.membership.status);
         membershipRow.querySelector('[data-membership-level]').value = components.membership.level;
         membershipRow.querySelector('[data-if-desired]').checked = components.membership.ifDesired;
+        membershipRow.querySelector('#membership-suggested-badge').hidden = !components.membership.suggested;
 
         FREQUENCY_COMPONENT_IDS.forEach(function (id) {
           var row = container.querySelector('[data-component="' + id + '"]');

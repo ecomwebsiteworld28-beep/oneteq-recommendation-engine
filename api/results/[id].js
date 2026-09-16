@@ -74,18 +74,32 @@ module.exports = async function handler(req, res) {
   const monthlyTotal = recommendedPackage.recurringMonthlyTotal ?? 0;
   const oneOffTotal = recommendedPackage.oneOffTotal ?? 0;
 
+  // A suggested membership (client hadn't given a firm Q5 answer, so this
+  // is a provisional starting point derived from Q4/Q3, not a resolved
+  // recommendation) must never read the same as a confirmed line item —
+  // distinct row styling plus an explicit "to be confirmed" label.
   const lineItemsHtml = lineItems.length
     ? lineItems
         .map(
           (item) => `
-        <tr>
-          <td>${escapeHtml(item.name)}</td>
+        <tr${item.suggested ? ' style="background: #fffbeb;"' : ''}>
+          <td>${escapeHtml(item.name)}${
+            item.suggested
+              ? ' <span style="display: inline-block; margin-left: 6px; padding: 2px 8px; background: #f59e0b; color: #fff; border-radius: 999px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;">Suggested starting point — to be confirmed</span>'
+              : ''
+          }</td>
           <td>${escapeHtml(item.billing)}</td>
           <td>$${escapeHtml(item.price)}</td>
         </tr>`,
         )
         .join('')
     : '<tr><td colspan="3">No package items recommended.</td></tr>';
+
+  const suggestionNoteHtml = recommendedPackage.membershipSuggested
+    ? `<div style="margin-top: 12px; padding: 12px 16px; background: #fffbeb; border: 1px solid #f59e0b; border-radius: 8px; color: #92400e; font-size: 0.85rem;">
+        The client didn't give a firm answer for desired ONETEQ frequency, so the membership above is a provisional starting point, not a confirmed recommendation — staff should confirm it with the client. ${escapeHtml(recommendedPackage.suggestionBasis || '')}
+      </div>`
+    : '';
 
   const body = `
     <h1 style="margin-bottom: 4px;">${escapeHtml(clientName)}</h1>
@@ -123,6 +137,7 @@ module.exports = async function handler(req, res) {
         </thead>
         <tbody>${lineItemsHtml}</tbody>
       </table>
+      ${suggestionNoteHtml}
       <div style="margin-top: 12px; font-size: 0.95rem;">
         <div><strong style="font-size: 1.1rem;">$${escapeHtml(monthlyTotal)}</strong> / month recurring</div>
         <div><strong style="font-size: 1.1rem;">$${escapeHtml(oneOffTotal)}</strong> one-off</div>
