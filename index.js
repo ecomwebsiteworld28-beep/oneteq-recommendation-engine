@@ -1034,8 +1034,19 @@ console.log("Nutrition Level:", determineNutritionLevel(7.6, false));
 console.log("Recovery Service:", determineRecoveryService(5.3));
 // ===== VO2/METABOLIC, RMR, BODY COMPOSITION SERVICES =====
 
+// FIELD AUDIT FINDING: hasHyroxOrEnduranceGoal was derived at the call
+// site as `classMatch.bestStartingMatch === "hyrox" || hasEnduranceCardioGoal`
+// - meaning the single goal "Improve my cardiovascular fitness or
+// endurance" set BOTH hasEnduranceCardioGoal AND hasHyroxOrEnduranceGoal
+// from the same fact, satisfying the >=2-signal HIGH threshold on its
+// own with zero corroboration from event/performance/data-interest. That
+// goal is common, which is why VO2 was firing for most people. Fixed at
+// the call site (deriveTestingServices) by deriving hasHyroxOrEnduranceGoal
+// from the HYROX class match alone, so the two signals are genuinely
+// independent - not fixed here, since this function just counts whatever
+// booleans it's given.
 function determineVO2MetabolicService(inputs) {
-  // inputs: hasEnduranceCardioGoal, hasEvent, highPerformanceFocus, highDataInterest, hasHyroxOrEnduranceGoal
+  // inputs: hasEnduranceCardioGoal, hasEvent, highPerformanceFocus, highDataInterest, hasHyroxOrEnduranceGoal, explicitLowDataInterest
   let strongSignals = 0;
   if (inputs.hasEnduranceCardioGoal) strongSignals++;
   if (inputs.hasEvent) strongSignals++;
@@ -1047,6 +1058,15 @@ function determineVO2MetabolicService(inputs) {
   if (strongSignals >= 2) level = "HIGH";
   else if (strongSignals === 1) level = "MODERATE";
   else level = "LOW";
+
+  // Same explicitLowDataInterest gate as RMR/Body Composition: VO2 is an
+  // objective-measurement product too, so a client who has actively told
+  // us (Q18 at the bottom of its scale) that this kind of data isn't
+  // important to them shouldn't get it recommended off other signals
+  // alone.
+  if (inputs.explicitLowDataInterest) {
+    level = "LOW";
+  }
 
   let status;
   if (level === "HIGH") status = "RECOMMENDED";
@@ -2253,27 +2273,41 @@ console.log(
 console.log(JSON.stringify(v3Catalogue.silver_membership, null, 2));
 // ===== 30.3: PT/COACHING PRICING BY TIER =====
 
+// Found in the field audit: LOW and MODERATE bands never got
+// initial_assessment alongside their own coaching product (only HIGH/VERY
+// HIGH did), and an unresolved PT Need returned nothing at all for VIP -
+// an unresolved need isn't an absence of need. Both fixed below: every
+// band now resolves to at most one ongoing coaching product per tier, and
+// initial_assessment is attached automatically wherever that product is
+// present (plus HIGH/VERY HIGH's Essential tier, which keeps its
+// existing assessment-only minimum even with no ongoing product yet).
 function getCoachingPricing(ptBand, tier) {
   // tier = "essential" | "recommended" | "vip"
-  const items = [];
+  let coachingProduct = null;
 
   if (ptBand === "LOW") {
-    if (tier === "vip") items.push("payg_1to1"); // If Desired only
+    if (tier === "vip") coachingProduct = "payg_1to1"; // If Desired only
     // essential/recommended: no ongoing 1:1
   } else if (ptBand === "MODERATE") {
-    if (tier === "recommended") items.push("coaching_technical_programming");
-    if (tier === "vip") items.push("coaching_technical_programming"); // staff-configurable base
+    if (tier === "recommended") coachingProduct = "coaching_technical_programming";
+    if (tier === "vip") coachingProduct = "coaching_technical_programming"; // staff-configurable base
   } else if (ptBand === "HIGH" || ptBand === "VERY HIGH") {
-    if (tier === "essential") items.push("initial_assessment");
-    if (tier === "recommended") {
-      items.push("initial_assessment");
-      items.push("coaching_1x_week");
-    }
-    if (tier === "vip") {
-      items.push("initial_assessment");
-      items.push("coaching_2x_week");
-    }
+    if (tier === "recommended") coachingProduct = "coaching_1x_week";
+    if (tier === "vip") coachingProduct = "coaching_2x_week";
+  } else {
+    // PT Need unresolved (ptBand is undefined) - VIP still offers a PAYG
+    // floor as If Desired, the same as a resolved LOW band would, rather
+    // than nothing.
+    if (tier === "vip") coachingProduct = "payg_1to1";
   }
+
+  const items = [];
+  const essentialNeedsAssessmentAlone =
+    (ptBand === "HIGH" || ptBand === "VERY HIGH") && tier === "essential";
+  if (coachingProduct || essentialNeedsAssessmentAlone) {
+    items.push("initial_assessment");
+  }
+  if (coachingProduct) items.push(coachingProduct);
 
   return items;
 }
@@ -2656,8 +2690,14 @@ function deriveTestingServices(complete, flags) {
   // Composition below - see the comment on determineRMRService.
   const explicitLowDataInterest =
     !isUnresolved(complete.rawScores.q18) && complete.rawScores.q18 <= 2;
-  const hasHyroxOrEnduranceGoal =
-    complete.classMatch.bestStartingMatch === "hyrox" || hasEnduranceCardioGoal;
+  // FIELD AUDIT FIX: this used to OR in hasEnduranceCardioGoal too, which
+  // meant the single goal "Improve my cardiovascular fitness or
+  // endurance" satisfied two of determineVO2MetabolicService's five
+  // "independent" signals from the same underlying fact - the actual
+  // source of VO2 firing for most people. Now reflects the HYROX class
+  // match alone, so it's a genuinely separate signal from the goal-based
+  // one.
+  const hasHyroxOrEnduranceGoal = complete.classMatch.bestStartingMatch === "hyrox";
 
   const vo2 = determineVO2MetabolicService({
     hasEnduranceCardioGoal,
@@ -2665,6 +2705,7 @@ function deriveTestingServices(complete, flags) {
     highPerformanceFocus,
     highDataInterest,
     hasHyroxOrEnduranceGoal,
+    explicitLowDataInterest,
   });
   const rmr = determineRMRService({
     significantWeightBodyCompGoal,
@@ -2714,7 +2755,15 @@ function adjustVipCoachingForAttentionPreference(vipCoachingProductIds, individu
   const currentIndex = VIP_COACHING_ATTENTION_LADDER.indexOf(currentFrequency);
 
   const step = individualAttentionPreference === "HIGH" ? 1 : -1;
-  const newIndex = Math.max(0, Math.min(VIP_COACHING_ATTENTION_LADDER.length - 1, currentIndex + step));
+  let newIndex = Math.max(0, Math.min(VIP_COACHING_ATTENTION_LADDER.length - 1, currentIndex + step));
+  // LOW means less emphasis, not removing the only 1:1 route entirely -
+  // never step below index 1 (payg_1to1) when there was a real product
+  // to de-emphasize from. Only lands on 0 ("NONE") if there was nothing
+  // there to begin with, which no PT band produces at VIP any more (see
+  // getCoachingPricing) - kept as a safety net rather than assumed away.
+  if (individualAttentionPreference === "LOW" && currentIndex >= 1 && newIndex === 0) {
+    newIndex = 1;
+  }
   const newFrequency = VIP_COACHING_ATTENTION_LADDER[newIndex];
 
   const items = [];
