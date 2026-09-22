@@ -849,9 +849,25 @@ function determineBestMatch(scores, foundationOverrideConditions) {
     q3Answer === "Very little or no structured exercise" ||
     q3Answer === "Some activity, but inconsistent";
 
+  // CLIENT FEEDBACK FIX: section 11 gives technique>=8 AND activity NONE/
+  // INCONSISTENT AND Foundation>=10, but section 25's acceptance tests
+  // show the real discriminator is activity, not technique - "sedentary
+  // longevity beginner," "weight/body-composition beginner," and
+  // "inactive client desperate for HYROX" all start at Foundation, while
+  // the guard tests ("70yo experienced lifter," "competitive runner,
+  // poor lifting technique") are protected by being highly active, not by
+  // having strong technique. Broadened to technique>=8 (as before) OR
+  // technique>=5 OR technique unresolved - someone inactive who's only
+  // "somewhat confident," or who couldn't answer at all, should still
+  // start at Foundation; the activity gate (unchanged) is what stops this
+  // reaching active clients regardless of their own technique confidence.
+  // Deliberately NOT broadened with age/longevity as a trigger - the
+  // brief explicitly forbids Foundation being triggered by age.
+  const techniqueConditionMet =
+    isUnresolved(techniqueSupportNeed) || techniqueSupportNeed >= 5;
+
   if (
-    !isUnresolved(techniqueSupportNeed) &&
-    techniqueSupportNeed >= 8 &&
+    techniqueConditionMet &&
     activityIsLowOrInconsistent &&
     foundationScore >= 10
   ) {
