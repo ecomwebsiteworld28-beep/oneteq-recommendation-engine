@@ -519,6 +519,23 @@ function calculateFoundationScore(inputs) {
   if (inputs.goals.includes("Improve my general health and fitness"))
     points += 2;
   if (inputs.goals.includes("Return to exercise or sport")) points += 2;
+  // CLIENT FEEDBACK FIX: wanting to reduce injury/pain risk is the same
+  // class of cautious, beginner/returning signal as the two goals above -
+  // Q1 and Q2 word this option differently, same as wantsInjuryReduction
+  // in deriveEventAndRiskFlags.
+  if (
+    inputs.goals.includes("Reduce the chance of pain or injury") ||
+    inputs.goals.includes("Reduce the chance of pain or injury affecting me")
+  )
+    points += 2;
+  // CLIENT FEEDBACK FIX: longevityFocus ("Stay fit, strong and
+  // independent as I get older") was credited by Lift(+3)/Hybrid(+4)/
+  // Hyrox(+2) but never checked here - an older client picking the goal
+  // that most directly describes them got zero credit toward Foundation,
+  // systematically pushing them elsewhere. Weighted at least as high as
+  // Hybrid's own +4, since Foundation is the safer starting point for
+  // that profile.
+  if (inputs.longevityFocus) points += 4;
 
   // Q21 flags
   if (inputs.q21_Balance) points += 2;
@@ -1816,6 +1833,7 @@ function runFullAssessmentComplete(answers, flags) {
       regularStrengthTraining: flags.regularStrengthTraining || false,
       performanceFocusScore: base.axes.performanceFocus.score,
       postnatalReturnToExercise: flags.postnatalReturnToExercise || false,
+      longevityFocus: flags.longevityFocus || false,
     }),
     lift: calculateLiftScore({
       goals: flags.goals,
@@ -2772,6 +2790,95 @@ function adjustVipCoachingForAttentionPreference(vipCoachingProductIds, individu
   return items;
 }
 
+// ===== TIER SUPERSET RECONCILIATION =====
+// CLIENT FEEDBACK FIX: VIP must always be a superset of Recommended, and
+// Recommended of Essential - "VIP = Recommended + enhancements," never
+// less. The Deep Dive/VO2 dedup and the attention-preference ladder above
+// both operate on one tier's product list at a time, with no visibility
+// into what a lower tier already has, so either can leave a higher tier
+// weaker than the one below it (confirmed on real contacts: Recommended
+// had vo2_metabolic, VIP didn't, because VIP's own Deep Dive triggered
+// the dedup independently; separately, a MODERATE PT band's VIP coaching
+// could be stepped down by a LOW attention preference below what
+// Recommended already had, since the ladder only knows VIP's own
+// baseline). Reconciled here, once, after both of those have already run
+// - not by skipping them, but by topping a higher tier back up to at
+// least what the tier below it ended up with.
+//
+// Membership is already identical across every tier (a no-op here).
+// Nutrition and coaching are each a single mutually-exclusive "level" per
+// tier, not a list to stack - nutrition's own tier map already keeps a
+// strictly non-decreasing price at every level (verified), so it needs
+// no reconciliation; coaching gets its own ladder-position check instead
+// of a raw id union, because unioning would show two different coaching
+// products side by side (e.g. payg_1to1 AND coaching_technical_programming)
+// as if a client should buy both - the fix is to replace the higher
+// tier's weaker choice with the lower tier's, not add both. Everything
+// else addressable here (clinical/testing/recovery) is genuinely
+// additive, so a plain id union is correct and safe for those.
+//
+// Note: this can result in VIP carrying both vo2_metabolic (inherited
+// from Recommended) and deep_dive (VIP's own addition) together, even
+// though the two are normally treated as non-stacking within a single
+// tier's own new additions - the superset guarantee is the harder rule
+// per this fix, so an inherited item is kept rather than re-suppressed.
+// Flagging this interaction rather than silently deciding it doesn't
+// matter.
+const ANCILLARY_ADDITIVE_IDS = new Set([
+  "physio_initial",
+  "physio_followup",
+  "director_consultation",
+  "vo2_metabolic",
+  "rmr_test",
+  "deep_dive",
+  "endurance_metabolic",
+  "sports_massage",
+]);
+
+function coachingLadderIndexOf(productIds) {
+  const found = productIds.find((id) => VIP_COACHING_ATTENTION_LADDER.includes(id));
+  return found ? VIP_COACHING_ATTENTION_LADDER.indexOf(found) : 0; // 0 = "NONE"
+}
+
+function reconcileTierSuperset(lowerProductIds, higherProductIds) {
+  const missingAdditiveIds = lowerProductIds.filter(
+    (id) => ANCILLARY_ADDITIVE_IDS.has(id) && !higherProductIds.includes(id),
+  );
+
+  let reconciledIds = [...higherProductIds, ...missingAdditiveIds];
+
+  const lowerCoachingIndex = coachingLadderIndexOf(lowerProductIds);
+  const higherCoachingIndex = coachingLadderIndexOf(reconciledIds);
+  if (lowerCoachingIndex > higherCoachingIndex) {
+    const lowerCoachingProduct = VIP_COACHING_ATTENTION_LADDER[lowerCoachingIndex];
+    reconciledIds = reconciledIds.filter((id) => !VIP_COACHING_ATTENTION_LADDER.includes(id));
+    reconciledIds.push(lowerCoachingProduct);
+  }
+
+  return reconciledIds;
+}
+
+// Defensive regression guard, not expected to ever actually fire given
+// the reconciliation above - fails loudly rather than silently shipping
+// a VIP package that's missing something Recommended has.
+function assertTierIsSupersetOfLower(higherProductIds, lowerProductIds, higherLabel, lowerLabel) {
+  const missing = lowerProductIds.filter(
+    (id) => ANCILLARY_ADDITIVE_IDS.has(id) && !higherProductIds.includes(id),
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `${higherLabel} is missing ${missing.join(", ")} that ${lowerLabel} has - tiers must never shrink going up.`,
+    );
+  }
+  const lowerCoachingIndex = coachingLadderIndexOf(lowerProductIds);
+  const higherCoachingIndex = coachingLadderIndexOf(higherProductIds);
+  if (higherCoachingIndex < lowerCoachingIndex) {
+    throw new Error(
+      `${higherLabel}'s coaching (ladder index ${higherCoachingIndex}) is weaker than ${lowerLabel}'s (index ${lowerCoachingIndex}) - tiers must never shrink going up.`,
+    );
+  }
+}
+
 function buildTieredPackages(complete, answers, flags) {
   const { axes, services, ptNeed } = complete;
   const isWeightBodyFatPrimaryGoal = (flags.goals || []).includes(
@@ -2833,8 +2940,17 @@ function buildTieredPackages(complete, answers, flags) {
   };
 
   const essentialProductIds = productIdsForTier("essential", ancillaryIds.essentialIds);
-  const recommendedProductIds = productIdsForTier("recommended", ancillaryIds.recommendedIds);
-  const vipProductIds = productIdsForTier("vip", ancillaryIds.vipIds);
+  let recommendedProductIds = productIdsForTier("recommended", ancillaryIds.recommendedIds);
+  let vipProductIds = productIdsForTier("vip", ancillaryIds.vipIds);
+
+  // Reconcile after the dedup and attention-ladder adjustments above have
+  // already run, so neither can leave a higher tier weaker than the one
+  // below it - see the "TIER SUPERSET RECONCILIATION" comment above
+  // reconcileTierSuperset.
+  recommendedProductIds = reconcileTierSuperset(essentialProductIds, recommendedProductIds);
+  vipProductIds = reconcileTierSuperset(recommendedProductIds, vipProductIds);
+  assertTierIsSupersetOfLower(recommendedProductIds, essentialProductIds, "Recommended", "Essential");
+  assertTierIsSupersetOfLower(vipProductIds, recommendedProductIds, "VIP", "Recommended");
 
   const essential = priceTier(essentialProductIds);
   const recommended = priceTier(recommendedProductIds);
