@@ -8,7 +8,7 @@ const {
   getGhlContact,
   getCustomFieldValue,
 } = require('../../lib/ghl.js');
-const { escapeHtml, renderPage, renderRadarChart } = require('../../lib/html.js');
+const { escapeHtml, formatMoney, renderPage, renderRadarChart } = require('../../lib/html.js');
 
 module.exports = async function handler(req, res) {
   const { id } = req.query;
@@ -89,7 +89,7 @@ module.exports = async function handler(req, res) {
               : ''
           }</td>
           <td>${escapeHtml(item.billing)}</td>
-          <td>$${escapeHtml(item.price)}</td>
+          <td>${escapeHtml(formatMoney(item.price))}</td>
         </tr>`,
         )
         .join('')
@@ -139,8 +139,8 @@ module.exports = async function handler(req, res) {
       </table>
       ${suggestionNoteHtml}
       <div style="margin-top: 12px; font-size: 0.95rem;">
-        <div><strong style="font-size: 1.1rem;">$${escapeHtml(monthlyTotal)}</strong> / month recurring</div>
-        <div><strong style="font-size: 1.1rem;">$${escapeHtml(oneOffTotal)}</strong> one-off</div>
+        <div><strong style="font-size: 1.1rem;">${escapeHtml(formatMoney(monthlyTotal))}</strong> / month recurring</div>
+        <div><strong style="font-size: 1.1rem;">${escapeHtml(formatMoney(oneOffTotal))}</strong> one-off</div>
       </div>
     </div>
   `;

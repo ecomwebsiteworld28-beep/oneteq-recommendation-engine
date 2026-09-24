@@ -26,7 +26,7 @@ const {
   INDIVIDUAL_ATTENTION_DEFAULT,
 } = require('../../lib/deriveFlags.js');
 const { writeAssessmentResultToGhl } = require('../../lib/writeAssessmentResult.js');
-const { escapeHtml, renderPage, renderRadarChart } = require('../../lib/html.js');
+const { escapeHtml, formatMoney, renderPage, renderRadarChart } = require('../../lib/html.js');
 
 // Membership tiers and ongoing coaching are what qualify a client for
 // getPhysioPricing()'s discounted physio price — matches the rule already
@@ -521,13 +521,6 @@ function renderComponentGroups(components) {
         ${rows}
       </div>`;
   }).join('');
-}
-
-// Prices are only ever integers or .5/.7-style catalogue values (e.g.
-// physio_followup's discountedPrice of 56.7) - always show two decimals
-// so "£56.7" never reads as a possibly-truncated amount next to "£56.70".
-function formatMoney(n) {
-  return '£' + Number(n).toFixed(2);
 }
 
 function renderTierCard(name, label, tier, highlighted) {
