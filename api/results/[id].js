@@ -101,9 +101,24 @@ module.exports = async function handler(req, res) {
       </div>`
     : '';
 
+  // Plain-English summary written by lib/aiSummary.js and stored once at
+  // scoring time - only ever read here, never generated on page load.
+  // Absent (never generated, or generation failed) simply hides the section.
+  const aiSummary = String(getCustomFieldValue(contact, GHL_CUSTOM_FIELD_IDS.aiClientSummary) || '').trim();
+  const summaryHtml = aiSummary
+    ? `<div style="margin-top: 28px;">
+      <h2 style="font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 8px;">Your Summary</h2>
+      ${aiSummary
+        .split(/\n\s*\n/)
+        .map((paragraph) => `<p style="margin: 0 0 12px; line-height: 1.6;">${escapeHtml(paragraph.trim())}</p>`)
+        .join('')}
+    </div>`
+    : '';
+
   const body = `
     <h1 style="margin-bottom: 4px;">${escapeHtml(clientName)}</h1>
     <p style="color: #64748b; margin-top: 0;">ONETEQ Assessment Results</p>
+    ${summaryHtml}
 
     <div style="margin-top: 28px;">
       <h2 style="font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 8px;">Class Match</h2>

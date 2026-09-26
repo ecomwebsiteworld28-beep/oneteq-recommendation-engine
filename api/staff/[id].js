@@ -27,6 +27,7 @@ const {
 } = require('../../lib/deriveFlags.js');
 const { writeAssessmentResultToGhl } = require('../../lib/writeAssessmentResult.js');
 const { escapeHtml, formatMoney, renderPage, renderRadarChart } = require('../../lib/html.js');
+const { generateAndStoreSummary } = require('../../lib/aiSummary.js');
 
 // Membership tiers and ongoing coaching are what qualify a client for
 // getPhysioPricing()'s discounted physio price — matches the rule already
@@ -544,6 +545,8 @@ function renderUnlockedPage(contact, result, id) {
   const classMatchLabel = classMatch.bestStartingMatch || 'Not yet determined';
   const classMatchNote = classMatch.note || null;
 
+  const aiSummary = String(getCustomFieldValue(contact, GHL_CUSTOM_FIELD_IDS.aiClientSummary) || '').trim();
+
   const ptNeed = result.ptNeed || {};
   const ptNeedLabel = ptNeed.unresolved ? 'Unresolved — needs discussion' : ptNeed.band || 'Unresolved — needs discussion';
 
@@ -615,6 +618,18 @@ function renderUnlockedPage(contact, result, id) {
 
     <h1 style="margin-bottom: 4px;">${escapeHtml(clientName)}</h1>
     <p style="color: #64748b; margin-top: 0;">ONETEQ Staff — Agreed Plan</p>
+
+    ${
+      aiSummary
+        ? `<div style="margin-top: 28px;">
+      <h2 style="font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 8px;">Client Summary (AI-written, read-only — what the client sees)</h2>
+      <div style="padding: 12px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.9rem; line-height: 1.6;">${aiSummary
+        .split(/\n\s*\n/)
+        .map((paragraph) => `<p style="margin: 0 0 10px;">${escapeHtml(paragraph.trim())}</p>`)
+        .join('')}</div>
+    </div>`
+        : ''
+    }
 
     <div style="margin-top: 28px;">
       <h2 style="font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 8px;">Class Match</h2>
@@ -1226,6 +1241,18 @@ async function handleRecalculate(req, res, id) {
     res.status(502).json({ status: 'error', message: 'Recalculated, but could not save the result to GHL.' });
     return;
   }
+
+  // The recalculated result is already saved above. Regenerate the client
+  // summary against it (the old text may now contradict a changed class);
+  // it never throws, and a failure blanks the field rather than leaving
+  // stale text in place. Staff are already waiting on this action, so
+  // there's no webhook-timeout concern here.
+  await generateAndStoreSummary({
+    contactId: id,
+    storedResult: { ...result, rawAnswers: answers, derivedFlags },
+    goals,
+    clearOnFailure: true,
+  });
 
   res.status(200).json({ status: 'success' });
 }

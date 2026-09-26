@@ -1,4 +1,8 @@
 {
+  "functions": {
+    "api/summary.js": { "maxDuration": 30 },
+    "api/staff/[id].js": { "maxDuration": 30 }
+  },
   "rewrites": [
     { "source": "/results/:id", "destination": "/api/results/:id" },
     { "source": "/staff/:id", "destination": "/api/staff/:id" }
