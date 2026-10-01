@@ -3,5 +3,8 @@
   "private": true,
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0"
+  },
+  "scripts": {
+    "test": "node tests/clientPage.test.js"
   }
 }
