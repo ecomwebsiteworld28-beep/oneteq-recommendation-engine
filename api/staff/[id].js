@@ -574,86 +574,107 @@ function renderUnlockedPage(contact, result, id) {
 
   const body = `
     <style>
-      .tier-strip { display: flex; gap: 12px; margin: 20px 0 28px; }
-      .tier-card { flex: 1; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; text-align: center; }
-      .tier-card-highlight { border-color: #2563eb; background: #eff6ff; }
-      .tier-card-name { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
-      .tier-card-price { font-size: 1.3rem; font-weight: 700; margin-top: 4px; }
-      .tier-card-price span { font-size: 0.8rem; font-weight: 400; color: #64748b; }
-      .tier-card-oneoff { font-size: 0.8rem; color: #64748b; margin-top: 2px; }
-      .load-tier-btn { margin-top: 10px; padding: 6px 12px; border: 1px solid #2563eb; background: #fff; color: #2563eb; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
-      .load-tier-btn:hover { background: #2563eb; color: #fff; }
-      .component-group { margin-top: 22px; }
-      .component-group h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 6px; }
-      .component-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
-      .component-label { flex: 0 0 200px; font-weight: 600; }
+      /* Staff page styles. Tokens and base come from lib/brandTokens.js (same as the client page). */
+      .sec { margin-top: 16px; }
+      .sec-title { font-size: 1.05rem; letter-spacing: 0.1em; margin: 0 0 6px; }
+      .sec-hint { color: var(--muted); font-size: 0.88rem; margin: 0 0 14px; }
+      .big-value { font-size: 1.35rem; font-weight: 800; color: var(--teal); text-transform: uppercase; letter-spacing: 0.03em; }
+      .summary-box { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; font-size: 0.92rem; line-height: 1.6; color: var(--muted); }
+      .summary-box p:last-child { margin-bottom: 0; }
+      .note-warn { margin-top: 12px; padding: 12px 16px; background: rgba(245, 185, 66, 0.12); border: 1px solid rgba(245, 185, 66, 0.55); border-radius: 12px; color: #f7cd78; font-size: 0.9rem; }
+      .status-text { margin-left: 12px; font-size: 0.9rem; color: var(--muted); }
+
+
+      .tier-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 16px 0 4px; }
+      .tier-card { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 16px; text-align: center; }
+      .tier-card-highlight { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(0, 158, 176, 0.18); }
+      .tier-card-name { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.16em; color: var(--teal); }
+      .tier-card-price { font-size: 1.6rem; font-weight: 800; margin-top: 6px; }
+      .tier-card-price span { font-size: 0.85rem; font-weight: 400; color: var(--muted); }
+      .tier-card-oneoff { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
+      .tier-card-suggested-note { margin-top: 8px; font-size: 0.74rem; color: #f7cd78; font-weight: 700; }
+      .load-tier-btn { margin-top: 12px; padding: 8px 16px; border: 1px solid var(--teal); background: transparent; color: var(--teal); border-radius: 999px; cursor: pointer; font-size: 0.85rem; font-weight: 700; font-family: inherit; }
+      .load-tier-btn:hover { background: var(--teal); color: var(--navy); }
+
+      .component-group { margin-top: 24px; }
+      .component-group h3 { font-size: 0.8rem; letter-spacing: 0.16em; color: var(--teal); margin-bottom: 4px; }
+      .component-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+      .component-label { flex: 0 0 200px; font-weight: 700; }
       .component-controls { flex: 1 1 260px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
       .nutrition-addons { display: flex; gap: 10px; flex-wrap: wrap; }
-      .inline-check { font-size: 0.85rem; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
-      select, input[type=number] { padding: 4px 6px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.85rem; }
-      .tri-state { display: flex; gap: 4px; }
-      .tri-state-btn { padding: 4px 10px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; font-size: 0.8rem; cursor: pointer; color: #475569; }
-      .tri-state-btn.active.tri-state-accepted { background: #16a34a; border-color: #16a34a; color: #fff; }
+      .inline-check { font-size: 0.88rem; color: var(--muted); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+      .tri-state { display: flex; gap: 6px; }
+      .tri-state-btn { padding: 6px 14px; border: 1px solid var(--line); background: transparent; border-radius: 999px; font-size: 0.82rem; font-weight: 700; cursor: pointer; color: var(--muted); font-family: inherit; }
+      .tri-state-btn:hover { border-color: var(--teal); color: var(--white); }
+      .tri-state-btn.active.tri-state-accepted { background: var(--teal); border-color: var(--teal); color: var(--navy); }
       .tri-state-btn.active.tri-state-declined { background: #dc2626; border-color: #dc2626; color: #fff; }
-      .tri-state-btn.active.tri-state-deferred { background: #f59e0b; border-color: #f59e0b; color: #fff; }
-      .if-desired { font-size: 0.8rem; color: #64748b; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
-      .suggested-badge { display: inline-block; padding: 2px 8px; background: #f59e0b; color: #fff; border-radius: 999px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap; }
-      .tier-card-suggested-note { margin-top: 6px; font-size: 0.72rem; color: #b45309; font-weight: 600; }
-      .agreed-plan { margin-top: 24px; padding: 16px; background: #f8fafc; border-top: 1px solid #e2e8f0; border-radius: 0 0 12px 12px; }
-      .agreed-plan-totals { font-size: 0.95rem; }
-      .agreed-plan-totals strong { font-size: 1.2rem; }
-      .save-btn { margin-top: 12px; padding: 10px 20px; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-size: 1rem; cursor: pointer; }
-      .staff-assessment { margin-top: 20px; padding: 16px; background: #fafaf9; border: 1px solid #e7e5e4; border-radius: 10px; }
+      .tri-state-btn.active.tri-state-deferred { background: #f5b942; border-color: #f5b942; color: var(--navy); }
+      .if-desired { font-size: 0.82rem; color: var(--faint); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+      .suggested-badge { display: inline-block; padding: 3px 10px; background: #f5b942; color: var(--navy); border-radius: 999px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
+      .suggested-badge[hidden] { display: none; }
+
+      .agreed-plan { margin-top: 16px; padding: 20px; background: var(--surface-2); border: 1px solid var(--teal); border-radius: var(--radius); }
+      .agreed-plan-totals { font-size: 0.98rem; color: var(--muted); }
+      .agreed-plan-totals strong { font-size: 1.5rem; color: var(--white); }
+      .save-btn { margin-top: 14px; }
+
+      .staff-assessment { margin-top: 4px; padding: 16px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; }
       .staff-assessment-grid { display: flex; flex-wrap: wrap; gap: 16px; }
       .staff-assessment-field { flex: 1 1 220px; }
-      .staff-assessment-field label { display: block; font-size: 0.8rem; font-weight: 600; color: #57534e; margin-bottom: 4px; }
+      .staff-assessment-field label { display: block; font-size: 0.8rem; font-weight: 700; color: var(--muted); margin-bottom: 4px; }
+      .staff-assessment-field label.inline-check { display: flex; }
       .staff-assessment-field select { width: 100%; }
       .staff-assessment-reason { margin-top: 14px; }
-      .staff-assessment-reason label { display: block; font-size: 0.8rem; font-weight: 600; color: #57534e; margin-bottom: 4px; }
-      .staff-assessment-reason textarea { width: 100%; min-height: 60px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.85rem; box-sizing: border-box; font-family: inherit; }
-      .staff-assessment-reason-required { color: #b45309; font-weight: 600; }
-      .recalculate-btn { margin-top: 12px; padding: 8px 16px; background: #fff; color: #57534e; border: 1px solid #57534e; border-radius: 8px; font-size: 0.9rem; cursor: pointer; }
-      .recalculate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+      .staff-assessment-reason label { display: block; font-size: 0.8rem; font-weight: 700; color: var(--muted); margin-bottom: 4px; }
+      .staff-assessment-reason textarea { width: 100%; min-height: 70px; padding: 10px; }
+      .staff-assessment-reason-required { color: #f7cd78; font-weight: 700; }
+      .recalculate-btn { margin-top: 14px; }
+
+
+      @media (max-width: 640px) {
+        .component-label { flex-basis: 100%; }
+        .tri-state-btn { padding: 8px 14px; }
+      }
     </style>
 
-    <h1 style="margin-bottom: 4px;">${escapeHtml(clientName)}</h1>
-    <p style="color: #64748b; margin-top: 0;">ONETEQ Staff — Agreed Plan</p>
+    <h1 class="page-title">${escapeHtml(clientName)}</h1>
+    <p class="muted">ONETEQ Staff — Agreed Plan</p>
 
     ${
       aiSummary
-        ? `<div style="margin-top: 28px;">
-      <h2 style="font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 8px;">Client Summary (AI-written, read-only — what the client sees)</h2>
-      <div style="padding: 12px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.9rem; line-height: 1.6;">${aiSummary
+        ? `<div class="card sec">
+      <h2 class="sec-title">Client Summary (AI-written, read-only — what the client sees)</h2>
+      <div class="summary-box">${aiSummary
         .split(/\n\s*\n/)
-        .map((paragraph) => `<p style="margin: 0 0 10px;">${escapeHtml(paragraph.trim())}</p>`)
+        .map((paragraph) => `<p>${escapeHtml(paragraph.trim())}</p>`)
         .join('')}</div>
     </div>`
         : ''
     }
 
-    <div style="margin-top: 28px;">
-      <h2 style="font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 8px;">Class Match</h2>
-      <div style="font-size: 1.25rem; font-weight: 600;">${escapeHtml(classMatchLabel)}</div>
+    <div class="card sec">
+      <h2 class="sec-title">Class Match</h2>
+      <div class="big-value">${escapeHtml(classMatchLabel)}</div>
       ${
         classMatchNote
-          ? `<div style="margin-top: 12px; padding: 12px 16px; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; color: #92400e; font-size: 0.9rem;">${escapeHtml(classMatchNote)}</div>`
+          ? `<div class="note-warn">${escapeHtml(classMatchNote)}</div>`
           : ''
       }
     </div>
 
-    <div style="margin-top: 28px;">
-      <h2 style="font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 8px;">7-Axis Overview</h2>
+    <div class="card sec">
+      <h2 class="sec-title">7-Axis Overview</h2>
       ${renderRadarChart(result.axes || {})}
     </div>
 
-    <div style="margin-top: 28px;">
-      <h2 style="font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 8px;">PT / Coaching Need</h2>
-      <div style="font-size: 1.25rem; font-weight: 600;">${escapeHtml(ptNeedLabel)}</div>
+    <div class="card sec">
+      <h2 class="sec-title">PT / Coaching Need</h2>
+      <div class="big-value">${escapeHtml(ptNeedLabel)}</div>
     </div>
 
-    <div style="margin-top: 28px;">
-      <h2 style="font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 4px;">Staff Assessment</h2>
-      <p style="color: #64748b; font-size: 0.85rem; margin-top: 0;">Section 21 — not survey questions. Setting any of these away from its default requires a reason, and re-runs the assessment below.</p>
+    <div class="card sec">
+      <h2 class="sec-title">Staff Assessment</h2>
+      <p class="sec-hint">Section 21 — not survey questions. Setting any of these away from its default requires a reason, and re-runs the assessment below.</p>
       <div class="staff-assessment">
         <div class="staff-assessment-grid">
           <div class="staff-assessment-field">
@@ -695,14 +716,14 @@ function renderUnlockedPage(contact, result, id) {
           <label id="staff-reason-label">Reason for override</label>
           <textarea id="staff-reason" placeholder="Required when any value above is set away from its default"></textarea>
         </div>
-        <button id="recalculate-btn" type="button" class="recalculate-btn">Recalculate</button>
-        <span id="recalculate-status" style="margin-left: 12px; font-size: 0.9rem; color: #64748b;"></span>
+        <button id="recalculate-btn" type="button" class="button button--ghost recalculate-btn">Recalculate</button>
+        <span id="recalculate-status" class="status-text"></span>
       </div>
     </div>
 
-    <div style="margin-top: 28px;">
-      <h2 style="font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 4px;">Reference Tiers</h2>
-      <p style="color: #64748b; font-size: 0.85rem; margin-top: 0;">Load one as a starting point, then adjust below. Loading resets any unsaved edits.</p>
+    <div class="card sec">
+      <h2 class="sec-title">Reference Tiers</h2>
+      <p class="sec-hint">Load one as a starting point, then adjust below. Loading resets any unsaved edits.</p>
       <div class="tier-strip">
         ${renderTierCard('essential', 'Essential', tieredPackages.essential, false)}
         ${renderTierCard('recommended', 'Recommended', tieredPackages.recommended, true)}
@@ -710,9 +731,9 @@ function renderUnlockedPage(contact, result, id) {
       </div>
     </div>
 
-    <div style="margin-top: 8px;">
-      <h2 style="font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 4px;">Agreed Plan Components</h2>
-      <p style="color: #64748b; font-size: 0.85rem; margin-top: 0;">Accept, decline or defer each component. Only accepted items count toward the total below.</p>
+    <div class="card sec">
+      <h2 class="sec-title">Agreed Plan Components</h2>
+      <p class="sec-hint">Accept, decline or defer each component. Only accepted items count toward the total below.</p>
       <div id="component-groups">${renderComponentGroups(initialComponents)}</div>
     </div>
 
@@ -721,8 +742,8 @@ function renderUnlockedPage(contact, result, id) {
         <div><strong id="live-monthly-total">£0</strong> / month recurring</div>
         <div><strong id="live-oneoff-total">£0</strong> one-off</div>
       </div>
-      <button id="save-final-package" type="button" class="save-btn">Save Agreed Plan</button>
-      <span id="save-status" style="margin-left: 12px; font-size: 0.9rem; color: #64748b;"></span>
+      <button id="save-final-package" type="button" class="button save-btn">Save Agreed Plan</button>
+      <span id="save-status" class="status-text"></span>
     </div>
 
     <script>
@@ -1031,19 +1052,17 @@ function renderUnlockedPage(contact, result, id) {
 
 function renderPasswordForm(id, error) {
   const body = `
-    <h1>Staff Access</h1>
-    <p style="color: #64748b;">Enter the staff password to view this client's pricing/override page.</p>
+    <h1 class="page-title">Staff Access</h1>
+    <p class="muted">Enter the staff password to view this client's pricing/override page.</p>
     ${
       error
-        ? `<div style="margin: 12px 0; padding: 12px 16px; background: #fee2e2; border: 1px solid #ef4444; border-radius: 8px; color: #991b1b; font-size: 0.9rem;">${escapeHtml(error)}</div>`
+        ? `<div class="note-error">${escapeHtml(error)}</div>`
         : ''
     }
-    <form method="POST" action="/staff/${escapeHtml(id)}" style="margin-top: 16px; display: flex; gap: 8px;">
+    <form method="POST" action="/staff/${escapeHtml(id)}" class="login-form">
       <input type="hidden" name="action" value="login" />
-      <input type="password" name="password" placeholder="Password" required
-        style="flex: 1; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 1rem;" />
-      <button type="submit"
-        style="padding: 10px 20px; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-size: 1rem; cursor: pointer;">Unlock</button>
+      <input type="password" name="password" placeholder="Password" required />
+      <button type="submit" class="button">Unlock</button>
     </form>
   `;
   return renderPage('Staff Login', body);

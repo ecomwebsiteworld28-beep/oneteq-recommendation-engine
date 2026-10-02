@@ -144,6 +144,18 @@ check('a result with no class still renders sensibly', () => {
   assert.match(html, /We need a bit more from you/);
 });
 
+check('client page and staff shell do not depend on each other', () => {
+  const lib = path.join(__dirname, '..', 'lib');
+  const client = fs.readFileSync(path.join(lib, 'clientPage.js'), 'utf8');
+  const staffShell = fs.readFileSync(path.join(lib, 'html.js'), 'utf8');
+  assert.doesNotMatch(client, /require\(['"]\.\/html\.js['"]\)/, 'clientPage.js must not import html.js');
+  assert.doesNotMatch(staffShell, /require\(['"]\.\/clientPage\.js['"]\)/, 'html.js must not import clientPage.js');
+  // The staff shell is allowed prices (they live on the staff page); it just shares the brand tokens.
+  const staffHtml = require('../lib/html.js').renderPage('Staff', '<p>£46.00 / month</p>');
+  assert.match(staffHtml, /--navy: #001020/);
+  assert.match(staffHtml, /£46\.00/);
+});
+
 check('message pages are branded and price-free', () => {
   for (const html of messages) {
     assert.match(html, /--navy: #001020/);
