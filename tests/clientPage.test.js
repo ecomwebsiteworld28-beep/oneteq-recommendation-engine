@@ -117,6 +117,21 @@ check('class sits at GymTEQ and physio at PhysioTEQ; other areas carry no brand'
   assert.doesNotMatch(html, /(?:nutrition|recovery)[^<]{0,40}(?:GymTEQ|PhysioTEQ)/i);
 });
 
+check('support cards each have their own sentence, and the tag only shows when bands differ', () => {
+  const lift = pages.find(({ fixture }) => fixture === fixtures.LIFT).html;
+  const sentences = [...lift.matchAll(/<p>([^<]+)<\/p>\s*<\/li>/g)].map((m) => m[1]);
+  assert.ok(sentences.length >= 4);
+  assert.equal(new Set(sentences).size, sentences.length, 'two support cards share the same sentence');
+  assert.doesNotMatch(lift, /Something the team can go through with you/);
+  assert.match(lift, /class="badge"/, 'varied bands should show tags');
+  const uniform = renderResultsPage({
+    clientName: 'Uniform',
+    result: { ...fixtures.LIFT.result, axes: { coaching: { score: 4.4 }, accountability: { score: 5 }, clinicalSupport: { score: 4.8 }, nutritionSupport: { score: 6.1 }, performanceFocus: { score: 5.8 }, recoverySupport: { score: 4.4 } } },
+    aiSummary: '',
+  });
+  assert.doesNotMatch(uniform, /class="badge"/, 'identical bands should not show tags');
+});
+
 check('client name is escaped', () => {
   const { html } = pages.find(({ fixture }) => fixture === fixtures.NO_CLASS);
   assert.ok(!html.includes('<script>alert(1)</script>'));
