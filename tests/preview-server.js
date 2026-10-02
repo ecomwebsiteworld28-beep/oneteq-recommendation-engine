@@ -11,6 +11,7 @@ const fixtures = require('./fixtures.js');
 const routes = {
   foundation: fixtures.FOUNDATION,
   lift: fixtures.LIFT,
+  'lift-summary': fixtures.LIFT_WITH_SUMMARY,
   hyrox: fixtures.HYROX_UNRESOLVED,
   empty: fixtures.NO_CLASS,
 };

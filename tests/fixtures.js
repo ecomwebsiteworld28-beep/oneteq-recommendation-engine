@@ -60,6 +60,13 @@ const LIFT = {
   aiSummary: '',
 };
 
+const LIFT_WITH_SUMMARY = {
+  name: 'Sample Lift Summary',
+  result: { ...LIFT.result },
+  aiSummary:
+    "Lift is the class we've recommended for you. Each session starts with a barbell lift, moves into a pair of weighted exercises done as a superset, and finishes with a final block of strength exercises. Given that you're looking to get stronger and build muscle, this structure gives you a solid strength foundation to build all of that from.\n\nFrom what you told us, physiotherapy and clinical support at PhysioTEQ is where we would put the most emphasis, since it keeps your training sustainable as you build up. Performance and event focus, and nutrition support, also featured in your answers. We'd like to understand your recovery better, which we can do when we talk it through with you.\n\nYou told us you would like to train twice a week at GymTEQ.\n\nBeyond your sessions, nutrition support with the ONETEQ Health team is something the team can talk through with you if you would find it useful.\n\nThe next step is simply a conversation with the team.",
+};
+
 const HYROX_UNRESOLVED = {
   name: 'Alexandria Montgomery-Featherstonehaugh',
   result: {
@@ -89,4 +96,4 @@ const NO_CLASS = {
   aiSummary: '',
 };
 
-module.exports = { FOUNDATION, LIFT, HYROX_UNRESOLVED, NO_CLASS, ALL: [FOUNDATION, LIFT, HYROX_UNRESOLVED, NO_CLASS] };
+module.exports = { FOUNDATION, LIFT, LIFT_WITH_SUMMARY, HYROX_UNRESOLVED, NO_CLASS, ALL: [FOUNDATION, LIFT, LIFT_WITH_SUMMARY, HYROX_UNRESOLVED, NO_CLASS] };

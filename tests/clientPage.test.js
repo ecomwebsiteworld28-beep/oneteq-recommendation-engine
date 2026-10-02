@@ -68,19 +68,37 @@ for (const { fixture, html } of pages) {
   });
 
   check(`sections in the requested order: ${fixture.name}`, () => {
-    const order = ['class="steps"', 'class="radar"', 'id="class-title"', 'id="support-title"', 'class="cta"'];
+    // strip, [summary], radar, class, support, call to action
+    const order = ['class="steps"'];
+    if (fixture.aiSummary) order.push('id="summary-title"');
+    order.push('class="radar"', 'id="class-title"', 'id="support-title"', 'class="cta"');
     let last = -1;
     for (const marker of order) {
       const at = html.indexOf(marker);
       assert.ok(at > last, `${marker} out of order or missing`);
       last = at;
     }
-    if (fixture.aiSummary) {
-      assert.ok(html.indexOf('id="summary-title"') > html.indexOf('id="class-title"'));
-      assert.ok(html.indexOf('id="summary-title"') < html.indexOf('id="support-title"'));
-    } else {
+    if (!fixture.aiSummary) {
       assert.ok(!html.includes('id="summary-title"'), 'summary section should be hidden when absent');
     }
+  });
+
+  check(`the summary opens the page after the strip, and leaves no gap or orphan heading when absent: ${fixture.name}`, () => {
+    const afterStrip = html.slice(html.indexOf('</ol>'));
+    const nextSection = afterStrip.match(/<\/section>\s*<section class="wrap section" id="([^"]+)"[^>]*aria-labelledby="([^"]+)"/);
+    assert.ok(nextSection, 'no section follows the strip');
+    if (fixture.aiSummary) {
+      assert.deepEqual([nextSection[1], nextSection[2]], ['recommendation', 'summary-title'], 'the summary must follow the strip');
+      assert.match(html, /id="recommendation"[^>]*>\s*<p class="eyebrow">Your recommendation<\/p>\s*<h2 id="summary-title">Your summary<\/h2>\s*<div class="card prose">/);
+      assert.ok(html.includes('id="class-detail"'), 'with a summary the class card keeps its own anchor');
+    } else {
+      assert.deepEqual([nextSection[1], nextSection[2]], ['support-profile', 'radar-title'], 'with no summary the strip flows straight into the radar');
+      assert.ok(!html.includes('id="class-detail"'));
+    }
+    // exactly one element owns #recommendation, whichever section it is
+    assert.equal((html.match(/id="recommendation"/g) || []).length, 1);
+    // every heading that is rendered has content under it
+    for (const [, id] of html.matchAll(/<h2 id="([^"]+)"/g)) assert.ok(html.includes(`aria-labelledby="${id}"`), `orphan heading ${id}`);
   });
 
   check(`mobile viewport and noindex: ${fixture.name}`, () => {
@@ -174,36 +192,62 @@ check('client page and staff shell do not depend on each other', () => {
   assert.match(staffHtml, /£46\.00/);
 });
 
-check('the highlighted step follows the section in view (starts on 4, no JavaScript needed to be right on load)', () => {
-  const { html } = pages.find(({ fixture }) => fixture === fixtures.LIFT);
+// Runs the page's own highlight script against a simulated page. `layout` lists the anchored
+// sections top to bottom with their document offsets, exactly as the real page orders them.
+function simulateHighlight(html, layout, scrollHeight) {
   const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
   const mk = (num) => {
     const link = { attrs: num === 4 ? { 'aria-current': 'step' } : {}, setAttribute(k, v) { this.attrs[k] = v; }, removeAttribute(k) { delete this.attrs[k]; } };
     return { className: 'x', link, getAttribute: () => String(num), querySelector: () => link };
   };
   const steps = [1, 2, 3, 4, 5].map(mk);
-  const tops = { 'support-profile': 900, recommendation: 1500, 'next-step': 2600 };
+  let scrollY = 0;
   const win = { innerHeight: 800, pageYOffset: 0, handler: null, addEventListener(type, fn) { this.handler = fn; }, requestAnimationFrame: (fn) => fn() };
   const doc = {
     querySelectorAll: () => steps,
-    getElementById: (id) => (tops[id] === undefined ? null : { getBoundingClientRect: () => ({ top: tops[id] }) }),
-    documentElement: { scrollHeight: 3400 },
+    getElementById: (id) => (layout[id] === undefined ? null : { getBoundingClientRect: () => ({ top: layout[id] - scrollY }) }),
+    documentElement: { scrollHeight },
   };
   vm.runInNewContext(script, { document: doc, window: win });
-  const state = () => steps.map((s) => s.className.replace('step step--', '')).join(',');
-  const active = () => steps.findIndex((s) => 'aria-current' in s.link.attrs) + 1;
-  const scrollTo = (y) => {
-    const shift = y;
-    tops['support-profile'] = 900 - shift; tops.recommendation = 1500 - shift; tops['next-step'] = 2600 - shift;
-    win.pageYOffset = y;
-    win.handler();
+  return {
+    active: () => steps.findIndex((s) => 'aria-current' in s.link.attrs) + 1,
+    state: () => steps.map((s) => s.className.replace('step step--', '')).join(','),
+    scrollTo(y) { scrollY = y; win.pageYOffset = y; win.handler(); },
   };
-  assert.equal(active(), 4, 'step 4 is current on load');
-  scrollTo(700); assert.equal(active(), 3); assert.equal(state(), 'done,done,current,todo,todo');
-  scrollTo(1300); assert.equal(active(), 4); assert.equal(state(), 'done,done,done,current,todo');
-  scrollTo(2400); assert.equal(active(), 5); assert.equal(state(), 'done,done,done,done,current');
-  scrollTo(0); assert.equal(active(), 4, 'back at the top, step 4 again');
-  scrollTo(2600); assert.equal(active(), 5, 'bottom of the page is always the last step');
+}
+
+check('with a summary: the highlight follows the page (summary 4, radar 3, class 4, call to action 5)', () => {
+  const { html } = pages.find(({ fixture }) => fixture === fixtures.LIFT_WITH_SUMMARY);
+  // page order: strip, summary(#recommendation), radar(#support-profile), class(#class-detail), support, cta
+  const page = simulateHighlight(html, { recommendation: 600, 'support-profile': 1500, 'class-detail': 2500, 'next-step': 3300 }, 4000);
+  assert.equal(page.active(), 4, 'step 4 is current on load, with the summary opening the page');
+  page.scrollTo(300); assert.equal(page.active(), 4);
+  page.scrollTo(700); assert.equal(page.active(), 4, 'reading the summary is step 4');
+  page.scrollTo(1400); assert.equal(page.active(), 3, 'the radar is step 3'); assert.equal(page.state(), 'done,done,current,todo,todo');
+  page.scrollTo(2300); assert.equal(page.active(), 4, 'the class card is step 4 again'); assert.equal(page.state(), 'done,done,done,current,todo');
+  page.scrollTo(3100); assert.equal(page.active(), 5); assert.equal(page.state(), 'done,done,done,done,current');
+  page.scrollTo(0); assert.equal(page.active(), 4, 'back at the top, step 4');
+  page.scrollTo(3200); assert.equal(page.active(), 5, 'the bottom of the page is always the last step');
+});
+
+check('a screen tall enough to show the whole page does not jump to the last step', () => {
+  const { html } = pages.find(({ fixture }) => fixture === fixtures.LIFT_WITH_SUMMARY);
+  const page = simulateHighlight(html, { recommendation: 100, 'support-profile': 300, 'class-detail': 500, 'next-step': 700 }, 790);
+  // The call to action is still below the reading line, so the highlight must not be 5.
+  assert.notEqual(page.active(), 5, 'a page that fits the screen must not count as scrolled to the bottom');
+  page.scrollTo(0);
+  assert.notEqual(page.active(), 5);
+});
+
+check('with no summary: the highlight follows the page (radar 3, class 4, call to action 5)', () => {
+  const { html } = pages.find(({ fixture }) => fixture === fixtures.LIFT);
+  const page = simulateHighlight(html, { 'support-profile': 500, recommendation: 1500, 'next-step': 2600 }, 3400);
+  assert.equal(page.active(), 4, 'step 4 is current on load');
+  page.scrollTo(700); assert.equal(page.active(), 3);
+  page.scrollTo(1300); assert.equal(page.active(), 4);
+  page.scrollTo(2400); assert.equal(page.active(), 5);
+  page.scrollTo(0); assert.equal(page.active(), 4, 'back at the top, step 4 again');
+  page.scrollTo(2600); assert.equal(page.active(), 5, 'bottom of the page is always the last step');
 });
 
 // ---- Circuits rename: display only ----
