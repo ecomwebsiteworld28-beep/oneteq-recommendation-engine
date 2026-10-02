@@ -322,7 +322,7 @@ check('the AI summary checks enforce brand ownership', () => {
 check('the call to action label and constant', () => {
   const clientLib = require('../lib/clientPage.js');
   assert.equal(clientLib.CTA_LABEL, 'Click here to discuss pricing or request a call back from one of the team');
-  assert.equal(typeof clientLib.CTA_URL, 'string');
+  assert.equal(clientLib.CTA_URL, 'https://api.leadconnectorhq.com/widget/form/DTWPdtZQOy8n4PrDba3x', 'the call to action opens the GHL contact form');
   const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'clientPage.js'), 'utf8');
   assert.equal((src.match(/^const CTA_URL = /gm) || []).length, 1, 'CTA_URL must stay a single named constant');
 });
