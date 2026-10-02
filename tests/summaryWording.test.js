@@ -130,6 +130,117 @@ check('the instructions handed to the model are written to the client as "you"',
   }
 });
 
+check('5. "dedicated" is banned everywhere', () => {
+  expectRejected('banned phrase', [
+    'This benefits from some dedicated attention.',
+    'It stands to gain the most from some dedicated support.',
+    'A dedicated programme would suit you.',
+    'Dedicated time to talk it through.',
+  ]);
+  expectAccepted(['The team can give this its full attention when you talk it through.']);
+});
+
+check('6. availability is never claimed', () => {
+  expectRejected('availability claim', [
+    'Sports massage is available through PhysioTEQ.',
+    'This is available at GymTEQ.',
+    'Support is available from the team.',
+    'Testing is available to you.',
+    'We offer nutrition support.',
+    'We also provide testing.',
+  ]);
+  expectAccepted(['The team can go through this with you if you feel it would be useful.']);
+});
+
+// ---- 7. a named service must be in THIS contact's own recommendation ----
+function factsFor(productIds) {
+  const stored = {
+    classMatch: { bestStartingMatch: 'lift', overrideApplied: false },
+    classScores: {},
+    axes: { coaching: { score: 8 }, accountability: { score: 6 }, clinicalSupport: { score: 5 }, nutritionSupport: { score: 7 }, performanceFocus: { score: 4 }, recoverySupport: { score: 5 } },
+    rawAnswers: { q5: '2 sessions per week' },
+    tieredPackages: { recommended: { lineItems: productIds.map((productId) => ({ productId })) } },
+  };
+  return summary.buildSummaryFacts(stored, ['Get stronger']);
+}
+// A complete, structurally valid summary with `sentence` in the support paragraph.
+function textWith(facts, sentence) {
+  return [
+    `${clean(100)}.`,
+    'We would like to talk through where support would help most.',
+    facts.frequencySentence,
+    `${sentence}`,
+    'The next step is simply a conversation with the team.',
+  ].join('\n\n');
+}
+const FULL_LIST = ['physio_initial', 'nutrition_essentials', 'sports_massage', 'rmr_test', 'coaching_1x_week'];
+
+check('7a. a service that was not recommended cannot be named (contact 9: massage offered when only nutrition was)', () => {
+  const nutritionOnly = factsFor(['nutrition_essentials']);
+  assert.deepEqual(nutritionOnly.supportAreas, ['nutrition support with the ONETEQ Health team']);
+  for (const bad of [
+    'Recovery support sits alongside this, with sports massage and recovery work available through PhysioTEQ.',
+    'Sports massage at PhysioTEQ could help your recovery.',
+    'A VO2 test could be useful.',
+    'Fitness testing with the ONETEQ Health team may help.',
+    'One-to-one coaching could suit you.',
+    'A physiotherapy session could help.',
+    'Physiotherapy at PhysioTEQ could help.',
+  ]) {
+    const result = summary.validateSummary(textWith(nutritionOnly, bad), nutritionOnly);
+    assert.equal(result.ok, false, `should be rejected: "${bad}"`);
+  }
+  const accepted = summary.validateSummary(textWith(nutritionOnly, 'On top of your sessions, nutrition support with the ONETEQ Health team is something the team can go through with you.'), nutritionOnly);
+  assert.equal(accepted.ok, true, accepted.reason);
+});
+
+check('7b. with nothing recommended, no service at all can be named', () => {
+  const none = factsFor([]);
+  assert.deepEqual(none.supportAreas, []);
+  for (const bad of [
+    'A meal plan could help.',
+    'Nutrition coaching could help.',
+    'One-to-one coaching may suit you.',
+    'A physiotherapy appointment is possible.',
+    'A director consultation could be arranged.',
+    'A progress review is possible.',
+    'A scan could be useful.',
+    'Massage could help.',
+  ]) {
+    const result = summary.validateSummary(textWith(none, bad), none);
+    assert.equal(result.ok, false, `should be rejected: "${bad}"`);
+    assert.match(result.reason, /names a service not in this client's recommendation|failed check/, `unexpected reason for "${bad}": ${result.reason}`);
+  }
+});
+
+check('7c. the same services ARE allowed when they are in the recommendation', () => {
+  const full = factsFor(FULL_LIST);
+  assert.equal(full.supportAreas.length, 5);
+  for (const good of [
+    'The team can go through sports massage and recovery work at PhysioTEQ with you.',
+    'Fitness and metabolic testing with the ONETEQ Health team may be useful.',
+    'One-to-one coaching is something the team can talk through with you.',
+    'Physiotherapy at PhysioTEQ is something the team can go through with you.',
+    'Nutrition support with the ONETEQ Health team, including a meal plan, can be talked through.',
+  ]) {
+    const result = summary.validateSummary(textWith(full, good), full);
+    assert.equal(result.ok, true, `should be accepted when recommended: "${good}" (${result.reason})`);
+  }
+  // some things are never allowed, whatever the recommendation
+  for (const never of ['A director consultation could help.', 'A scan could help.']) {
+    assert.equal(summary.validateSummary(textWith(full, never), full).ok, false, `never allowed: "${never}"`);
+  }
+});
+
+check('7d. area names (topics, not services) are still fine without a recommendation', () => {
+  const none = factsFor([]);
+  const ok = summary.validateSummary(
+    textWith(none, 'Physiotherapy and clinical support at PhysioTEQ came through most clearly, and recovery support sits alongside that.'),
+    none,
+  );
+  assert.equal(ok.ok, true, ok.reason);
+});
+
 check('the prompt states the new rules', () => {
   const p = summary.SYSTEM_PROMPT;
   assert.match(p, /Always speak to the client as "you"/);
@@ -137,6 +248,9 @@ check('the prompt states the new rules', () => {
   assert.match(p, /Never promise or imply an outcome/);
   assert.match(p, /Never use the word "worth" except in the phrase "worth a conversation"/);
   assert.doesNotMatch(p, /worth having/, 'the old, narrower "worth" rule is gone');
+  assert.doesNotMatch(p, /massage/i, 'the prompt must not name a service the model could then offer to anyone');
+  assert.match(p, /Only ever offer or name a service[^\n]*that appears in supportAreas/);
+  assert.match(p, /never say a service is "available", or that we "offer" or "provide" it/);
 });
 
 if (failures) {
