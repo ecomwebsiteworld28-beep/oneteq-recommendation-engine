@@ -102,14 +102,16 @@ check('4a. no promised outcomes or routes to a goal', () => {
   ]);
 });
 
-check('4b. "worth" appears only in "worth a conversation"', () => {
+check('4b. "worth" is never used, in any phrase', () => {
   expectRejected('"worth" phrasing', [
     'These all sit together and are worth going through with the team.',
     'It is worth having in place.',
     'That is worth keeping in mind.',
     'Worth considering.',
+    'Each of these is worth a conversation with the team.',
+    'It is worth a chat.',
   ]);
-  expectAccepted(['Each of these is worth a conversation with the team.', 'It is worth a chat.']);
+  expectAccepted(['Each of these is a good topic for a conversation with the team.']);
 });
 
 check('the instructions handed to the model are written to the client as "you"', () => {
@@ -241,13 +243,83 @@ check('7d. area names (topics, not services) are still fine without a recommenda
   assert.equal(ok.ok, true, ok.reason);
 });
 
+// ---- 8. areas can be discussed as topics, but only what is recommended can be offered ----
+check('8a. an area that is not in the recommended list cannot be offered (contacts 4, 7, 9, 10 before the fix)', () => {
+  const nutritionOnly = factsFor(['nutrition_essentials']);
+  for (const bad of [
+    'Coaching support with programming and technique is also something the team can go through with you.',
+    'From there, the team can also help with coaching support around programming and technique.',
+    'Physiotherapy and clinical support from PhysioTEQ are also areas the team can cover with you.',
+    'Your performance and event focus is another area the team can help with.',
+    'Recovery support is somewhere the team can help.',
+    'There is also scope to look at structure and accountability.',
+    'PhysioTEQ can support you with physiotherapy and clinical support.',
+  ]) {
+    const result = summary.validateSummary(textWith(nutritionOnly, bad), nutritionOnly);
+    assert.equal(result.ok, false, `should be rejected: "${bad}"`);
+    assert.match(result.reason, /offers something not in this client's recommendation|failed check/, `unexpected reason for "${bad}": ${result.reason}`);
+  }
+});
+
+check('8b. the same areas CAN still be discussed as topics', () => {
+  const nutritionOnly = factsFor(['nutrition_essentials']);
+  for (const good of [
+    'Coaching support with programming and technique also came through in your answers.',
+    'Physiotherapy and clinical support at PhysioTEQ is where we would put the most emphasis.',
+    'Support around structure and accountability could also help you get more out of your training.',
+    'Performance and event focus is the natural place to begin.',
+    'Recovery support sits naturally alongside that.',
+    "We don't have quite enough detail yet on nutrition, so we'll go through that with you.",
+    'We would like to understand your coaching needs better, which we can do when we talk it through with you.',
+    'The team will go through that with you.',
+    'Bring any questions to the team, and they will be happy to talk them through with you.',
+  ]) {
+    const result = summary.validateSummary(textWith(nutritionOnly, good), nutritionOnly);
+    assert.equal(result.ok, true, `should be accepted: "${good}" (${result.reason})`);
+  }
+});
+
+check('8c. an offer IS allowed for what is recommended, and never for performance or accountability', () => {
+  const full = factsFor(FULL_LIST);
+  for (const good of [
+    'Nutrition support with the ONETEQ Health team is something the team can go through with you.',
+    'Physiotherapy at PhysioTEQ is something the team can talk through with you.',
+    'One-to-one coaching is an area the team can cover with you.',
+    'Sports massage and recovery work at PhysioTEQ are things the team can go through with you.',
+    'The team can also look at fitness and metabolic testing with the ONETEQ Health team.',
+  ]) {
+    const result = summary.validateSummary(textWith(full, good), full);
+    assert.equal(result.ok, true, `should be accepted when recommended: "${good}" (${result.reason})`);
+  }
+  for (const never of ['The team can help with performance and event focus.', 'Structure and accountability is something the team can go through with you.']) {
+    assert.equal(summary.validateSummary(textWith(full, never), full).ok, false, `never offerable: "${never}"`);
+  }
+});
+
+check('8d. no framing handed to the model tells it to offer areas', () => {
+  const seen = new Set();
+  for (let i = 0; i < 400; i += 1) {
+    const stored = {
+      classMatch: { bestStartingMatch: ['foundation', 'lift', 'hybrid', 'hyrox'][i % 4] },
+      classScores: {}, rawAnswers: {},
+      axes: { coaching: { score: i % 10 }, nutritionSupport: { score: (i * 3) % 10 }, performanceFocus: { score: (i * 7) % 10 }, recoverySupport: { score: (i * 5) % 10 } },
+    };
+    const notes = summary.buildSummaryFacts(stored, [`g${i}`]).styleNotes;
+    seen.add(notes.areasLead);
+    seen.add(notes.areasFollowOn);
+    seen.add(notes.gapPhrase);
+  }
+  assert.ok(seen.size >= 10, 'not every area framing was exercised');
+  for (const note of seen) assert.doesNotMatch(note, /team can help|can help|places the team|worth/i, `a framing invites an offer: ${note}`);
+});
+
 check('the prompt states the new rules', () => {
   const p = summary.SYSTEM_PROMPT;
   assert.match(p, /Always speak to the client as "you"/);
   assert.match(p, /higher relevance never means a problem or a deficit/);
   assert.match(p, /Never promise or imply an outcome/);
-  assert.match(p, /Never use the word "worth" except in the phrase "worth a conversation"/);
-  assert.doesNotMatch(p, /worth having/, 'the old, narrower "worth" rule is gone');
+  assert.doesNotMatch(p, /worth/i, 'the word must not appear in the prompt at all (it primes the model to use it)');
+  assert.match(p, /areas are topics, not offers/);
   assert.doesNotMatch(p, /massage/i, 'the prompt must not name a service the model could then offer to anyone');
   assert.match(p, /Only ever offer or name a service[^\n]*that appears in supportAreas/);
   assert.match(p, /never say a service is "available", or that we "offer" or "provide" it/);
