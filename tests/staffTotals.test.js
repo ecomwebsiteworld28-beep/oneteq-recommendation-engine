@@ -192,13 +192,44 @@ check('the staff page shows the class as Circuits and never as HYROX, for every 
       { ...result, classMatch: { bestStartingMatch: key, overrideApplied: false } },
       't',
     );
-    // The dropdown option's saved VALUE keeps the old string on purpose (GHL field + deriveFlags.js); only what is shown must change.
-    assert.doesNotMatch(html.replace(/value="[^"]*"/g, ''), /hyrox/i, `staff page shows the old name for ${key}`);
+    // Neither what is shown nor what the dropdown saves to GHL may be the old name any more.
+    assert.doesNotMatch(html, /hyrox/i, `staff page still contains the old name for ${key}`);
     assert.ok(
-      html.includes('<option value="Conditioning/HYROX-style">Conditioning/Circuits-style</option>'),
-      'label renamed, saved value unchanged',
+      html.includes('<option value="Conditioning/Circuits-style">Conditioning/Circuits-style</option>'),
+      'the dropdown saves the current option',
     );
     if (key === 'hyrox') assert.match(html, /class="big-value">Circuits</);
+  }
+});
+
+// ---- the Circuits rename of the Preferred_Training_Style option: no window where saving or reading breaks ----
+check('what the staff page saves for the conditioning style is the option that now exists in GHL', () => {
+  const { sanitizeStaffAssessment } = internals;
+  const saved = (value) => sanitizeStaffAssessment({ preferredTrainingStyle: value }).preferredTrainingStyle;
+  assert.equal(saved('Conditioning/Circuits-style'), 'Conditioning/Circuits-style');
+  assert.equal(saved('No preference'), 'No preference');
+  assert.equal(saved('Strength-focused'), 'Strength-focused');
+  assert.equal(saved('Mixed/balanced'), 'Mixed/balanced');
+});
+
+check('a staff tab opened before the rename still saves correctly (old text is mapped, never reset to "No preference")', () => {
+  const { sanitizeStaffAssessment } = internals;
+  const out = sanitizeStaffAssessment({ preferredTrainingStyle: 'Conditioning/HYROX-style' });
+  assert.equal(out.preferredTrainingStyle, 'Conditioning/Circuits-style');
+  assert.notEqual(out.preferredTrainingStyle, 'No preference');
+  // junk is still rejected to the default
+  assert.equal(sanitizeStaffAssessment({ preferredTrainingStyle: 'Conditioning/Nonsense' }).preferredTrainingStyle, 'No preference');
+  assert.equal(sanitizeStaffAssessment(undefined).preferredTrainingStyle, 'No preference');
+});
+
+check('a contact holding either spelling shows the right dropdown entry selected, and loads the engine value', () => {
+  const { getStaffAssessmentRawValues } = internals;
+  for (const stored of ['Conditioning/HYROX-style', 'Conditioning/Circuits-style']) {
+    const contact = { id: 't', firstName: 'T', customFields: [{ id: GHL_CUSTOM_FIELD_IDS.preferredTrainingStyle, value: stored }] };
+    assert.equal(getStaffAssessmentRawValues(contact).preferredTrainingStyle, 'Conditioning/Circuits-style', stored);
+    const html = renderUnlockedPage(contact, scenarios[0].result, 't');
+    assert.ok(html.includes('<option value="Conditioning/Circuits-style" selected>'), `dropdown not selected for stored "${stored}"`);
+    assert.ok(!html.includes('Conditioning/HYROX-style'), 'the old spelling must not appear in the page');
   }
 });
 

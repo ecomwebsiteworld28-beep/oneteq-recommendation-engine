@@ -83,9 +83,12 @@ function getStaffAssessmentRawValues(contact) {
 // sanitizeComponentState below.
 function sanitizeStaffAssessment(raw) {
   raw = raw && typeof raw === 'object' ? raw : {};
+  // The old spelling of the conditioning option (a tab opened before the rename) is mapped to the current
+  // one; without this it would fail the check below and silently save "No preference" instead.
+  const preferredStyle = canonicalPreferredStyleOption(raw.preferredTrainingStyle);
   return {
-    preferredTrainingStyle: PREFERRED_TRAINING_STYLE_OPTIONS.includes(raw.preferredTrainingStyle)
-      ? raw.preferredTrainingStyle
+    preferredTrainingStyle: PREFERRED_TRAINING_STYLE_OPTIONS.includes(preferredStyle)
+      ? preferredStyle
       : STAFF_ASSESSMENT_DEFAULTS.preferredTrainingStyle,
     individualAttentionPreference: INDIVIDUAL_ATTENTION_OPTIONS.includes(raw.individualAttentionPreference)
       ? raw.individualAttentionPreference
@@ -687,8 +690,7 @@ function renderUnlockedPage(contact, result, id) {
             <label>Preferred Training Style</label>
             <select id="staff-preferred-style">
               ${optionsHtml(
-                // Label only: the option's value is what is saved to GHL and matched in deriveFlags.js.
-                PREFERRED_TRAINING_STYLE_OPTIONS.map((o) => ({ key: o, label: renameLegacyClassName(o) })),
+                PREFERRED_TRAINING_STYLE_OPTIONS.map((o) => ({ key: o, label: o })),
                 staffAssessmentValues.preferredTrainingStyle,
               )}
             </select>
@@ -1395,4 +1397,6 @@ module.exports.internals = {
   sanitizeComponentState,
   MEMBERSHIP_OR_COACHING_KEYS,
   renderUnlockedPage,
+  sanitizeStaffAssessment,
+  getStaffAssessmentRawValues,
 };

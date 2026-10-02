@@ -52,7 +52,8 @@ check('the preferred-style option is read under either spelling', () => {
   assert.equal(resolvePreferredStyle('No preference'), 'NONE');
   assert.equal(resolvePreferredStyle('something else'), 'NONE');
   assert.equal(resolvePreferredStyle(undefined), 'NONE');
-  assert.equal(canonicalPreferredStyleOption('Conditioning/Circuits-style'), 'Conditioning/HYROX-style');
+  assert.equal(canonicalPreferredStyleOption('Conditioning/HYROX-style'), 'Conditioning/Circuits-style', 'the old spelling maps to the current option');
+  assert.equal(canonicalPreferredStyleOption('Conditioning/Circuits-style'), 'Conditioning/Circuits-style');
   assert.equal(canonicalPreferredStyleOption('Strength-focused'), 'Strength-focused');
 });
 
@@ -62,10 +63,12 @@ check('a contact whose GHL field holds either spelling gives the engine the same
   assert.equal(buildStaffOverrideFlags(contactWith('Conditioning/Circuits-style')).preferredStyle, 'CONDITIONING_HYROX');
 });
 
-check('the staff dropdown still offers exactly one conditioning option (the alias is read-only)', () => {
+check('the staff dropdown offers exactly one conditioning option, the current one (the old spelling is read-only)', () => {
   const options = Object.keys(PREFERRED_STYLE_OPTION_TO_VALUE);
   assert.equal(options.filter((o) => /^Conditioning/.test(o)).length, 1);
-  assert.ok(!options.includes('Conditioning/Circuits-style'));
+  assert.ok(options.includes('Conditioning/Circuits-style'));
+  assert.ok(!options.includes('Conditioning/HYROX-style'), 'the old spelling must not be offered or saved');
+  assert.deepEqual(options, ['No preference', 'Strength-focused', 'Mixed/balanced', 'Conditioning/Circuits-style']);
 });
 
 check('class scores are identical whichever name the client used', () => {
