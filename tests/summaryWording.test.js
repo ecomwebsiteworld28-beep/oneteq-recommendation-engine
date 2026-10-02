@@ -150,8 +150,18 @@ check('6. availability is never claimed', () => {
     'Testing is available to you.',
     'We offer nutrition support.',
     'We also provide testing.',
+    // the same claim, dressed up (contact 4, pass 3: "...testing with the ONETEQ Health team are there too")
+    'Nutrition support and fitness and metabolic testing with the ONETEQ Health team are there too.',
+    'Fitness testing is on offer.',
+    'Support is also on hand.',
+    'Both are there if you want them.',
   ]);
-  expectAccepted(['The team can go through this with you if you feel it would be useful.']);
+  expectAccepted([
+    'The team can go through this with you if you feel it would be useful.',
+    'If there are any questions, bring them to the team.', // "there are", not "are there"
+    'We are happy to talk it through, and there is plenty of time.',
+    'Bring anything to hand when we talk.', // "to hand" is not "on hand"
+  ]);
 });
 
 // ---- 7. a named service must be in THIS contact's own recommendation ----
