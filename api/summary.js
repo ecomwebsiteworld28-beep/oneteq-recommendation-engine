@@ -105,6 +105,7 @@ module.exports = async function handler(req, res) {
       reason: produced.reason,
       attempts: produced.attempts,
       retryReasons: produced.retryReasons,
+      retryMatches: produced.retryMatches,
       model: produced.model,
       latencyMs: produced.latencyMs,
       usage: produced.usage,
