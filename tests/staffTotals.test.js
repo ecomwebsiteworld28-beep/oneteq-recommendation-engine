@@ -184,6 +184,24 @@ for (const { label, result } of scenarios) {
   });
 }
 
+check('the staff page shows the class as Circuits and never as HYROX, for every class', () => {
+  for (const key of ['foundation', 'lift', 'hybrid', 'hyrox']) {
+    const { result } = scenarios[0];
+    const html = renderUnlockedPage(
+      { id: 't', firstName: 'T', customFields: [{ id: GHL_CUSTOM_FIELD_IDS.aiClientSummary, value: 'HYROX is the class we recommend.' }] },
+      { ...result, classMatch: { bestStartingMatch: key, overrideApplied: false } },
+      't',
+    );
+    // The dropdown option's saved VALUE keeps the old string on purpose (GHL field + deriveFlags.js); only what is shown must change.
+    assert.doesNotMatch(html.replace(/value="[^"]*"/g, ''), /hyrox/i, `staff page shows the old name for ${key}`);
+    assert.ok(
+      html.includes('<option value="Conditioning/HYROX-style">Conditioning/Circuits-style</option>'),
+      'label renamed, saved value unchanged',
+    );
+    if (key === 'hyrox') assert.match(html, /class="big-value">Circuits</);
+  }
+});
+
 // The test is only meaningful if it actually exercised the deferred cases.
 check('coverage: suggested memberships, VIP-only extras and fully-accepted tiers were all exercised', () => {
   assert.ok(sawDeferredMembership > 0, 'no scenario produced a deferred (suggested) membership');

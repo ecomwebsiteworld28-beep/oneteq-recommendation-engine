@@ -28,6 +28,7 @@ const {
 const { writeAssessmentResultToGhl } = require('../../lib/writeAssessmentResult.js');
 const { escapeHtml, formatMoney, renderPage, renderRadarChart } = require('../../lib/html.js');
 const { generateAndStoreSummary } = require('../../lib/aiSummary.js');
+const { classDisplayName, renameLegacyClassName } = require('../../lib/classNames.js');
 
 // Membership tiers and ongoing coaching are what qualify a client for
 // getPhysioPricing()'s discounted physio price — matches the rule already
@@ -542,10 +543,11 @@ function renderUnlockedPage(contact, result, id) {
     'This client';
 
   const classMatch = result.classMatch || {};
-  const classMatchLabel = classMatch.bestStartingMatch || 'Not yet determined';
+  // Display name only: the stored class_match value stays the engine's key (see lib/classNames.js).
+  const classMatchLabel = classDisplayName(classMatch.bestStartingMatch) || 'Not yet determined';
   const classMatchNote = classMatch.note || null;
 
-  const aiSummary = String(getCustomFieldValue(contact, GHL_CUSTOM_FIELD_IDS.aiClientSummary) || '').trim();
+  const aiSummary = renameLegacyClassName(String(getCustomFieldValue(contact, GHL_CUSTOM_FIELD_IDS.aiClientSummary) || '').trim());
 
   const ptNeed = result.ptNeed || {};
   const ptNeedLabel = ptNeed.unresolved ? 'Unresolved — needs discussion' : ptNeed.band || 'Unresolved — needs discussion';
@@ -684,7 +686,8 @@ function renderUnlockedPage(contact, result, id) {
             <label>Preferred Training Style</label>
             <select id="staff-preferred-style">
               ${optionsHtml(
-                PREFERRED_TRAINING_STYLE_OPTIONS.map((o) => ({ key: o, label: o })),
+                // Label only: the option's value is what is saved to GHL and matched in deriveFlags.js.
+                PREFERRED_TRAINING_STYLE_OPTIONS.map((o) => ({ key: o, label: renameLegacyClassName(o) })),
                 staffAssessmentValues.preferredTrainingStyle,
               )}
             </select>

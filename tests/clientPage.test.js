@@ -4,6 +4,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 const { renderResultsPage, renderMessagePage, CTA_URL, CTA_LABEL, PROCESS_STEPS } = require('../lib/clientPage.js');
 const fixtures = require('./fixtures.js');
 
@@ -51,11 +52,16 @@ for (const { fixture, html } of pages) {
     assert.ok(html.includes(CTA_LABEL));
   });
 
-  check(`five-step process with the fourth current: ${fixture.name}`, () => {
+  check(`five steps; steps 3-5 jump to real sections, 1-2 are not links; step 4 starts current: ${fixture.name}`, () => {
     assert.equal(PROCESS_STEPS.length, 5);
     assert.equal((html.match(/class="step step--/g) || []).length, 5);
     assert.equal((html.match(/aria-current="step"/g) || []).length, 1);
-    assert.match(html, /step--current"[^>]*aria-current="step">\s*<span class="step__num"[^>]*>4</);
+    assert.match(html, /<li class="step step--current" data-step="4">\s*<a class="step__link" href="#recommendation" aria-current="step">/);
+    const links = [...html.matchAll(/<li class="step step--\w+" data-step="(\d)">\s*<a class="step__link" href="#([^"]+)"/g)];
+    assert.deepEqual(links.map((m) => [m[1], m[2]]), [['3', 'support-profile'], ['4', 'recommendation'], ['5', 'next-step']]);
+    for (const [, , id] of links) assert.ok(html.includes(`id="${id}"`), `no section with id "${id}" for a step link`);
+    assert.match(html, /<li class="step step--done" data-step="1">\s*<div class="step__link">/);
+    assert.match(html, /<li class="step step--done" data-step="2">\s*<div class="step__link">/);
   });
 
   check(`sections in the requested order: ${fixture.name}`, () => {
@@ -154,6 +160,98 @@ check('client page and staff shell do not depend on each other', () => {
   const staffHtml = require('../lib/html.js').renderPage('Staff', '<p>£46.00 / month</p>');
   assert.match(staffHtml, /--navy: #001020/);
   assert.match(staffHtml, /£46\.00/);
+});
+
+check('the highlighted step follows the section in view (starts on 4, no JavaScript needed to be right on load)', () => {
+  const { html } = pages.find(({ fixture }) => fixture === fixtures.LIFT);
+  const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+  const mk = (num) => {
+    const link = { attrs: num === 4 ? { 'aria-current': 'step' } : {}, setAttribute(k, v) { this.attrs[k] = v; }, removeAttribute(k) { delete this.attrs[k]; } };
+    return { className: 'x', link, getAttribute: () => String(num), querySelector: () => link };
+  };
+  const steps = [1, 2, 3, 4, 5].map(mk);
+  const tops = { 'support-profile': 900, recommendation: 1500, 'next-step': 2600 };
+  const win = { innerHeight: 800, pageYOffset: 0, handler: null, addEventListener(type, fn) { this.handler = fn; }, requestAnimationFrame: (fn) => fn() };
+  const doc = {
+    querySelectorAll: () => steps,
+    getElementById: (id) => (tops[id] === undefined ? null : { getBoundingClientRect: () => ({ top: tops[id] }) }),
+    documentElement: { scrollHeight: 3400 },
+  };
+  vm.runInNewContext(script, { document: doc, window: win });
+  const state = () => steps.map((s) => s.className.replace('step step--', '')).join(',');
+  const active = () => steps.findIndex((s) => 'aria-current' in s.link.attrs) + 1;
+  const scrollTo = (y) => {
+    const shift = y;
+    tops['support-profile'] = 900 - shift; tops.recommendation = 1500 - shift; tops['next-step'] = 2600 - shift;
+    win.pageYOffset = y;
+    win.handler();
+  };
+  assert.equal(active(), 4, 'step 4 is current on load');
+  scrollTo(700); assert.equal(active(), 3); assert.equal(state(), 'done,done,current,todo,todo');
+  scrollTo(1300); assert.equal(active(), 4); assert.equal(state(), 'done,done,done,current,todo');
+  scrollTo(2400); assert.equal(active(), 5); assert.equal(state(), 'done,done,done,done,current');
+  scrollTo(0); assert.equal(active(), 4, 'back at the top, step 4 again');
+  scrollTo(2600); assert.equal(active(), 5, 'bottom of the page is always the last step');
+});
+
+// ---- Circuits rename: display only ----
+const classLib = require('../lib/classNames.js');
+const summaryLib = require('../lib/aiSummary.js');
+
+check('"HYROX" appears nowhere in client-facing output, for every class and every progression', () => {
+  const baseAxes = fixtures.LIFT.result.axes;
+  const cases = [];
+  for (const key of ['foundation', 'lift', 'hybrid', 'hyrox']) {
+    cases.push({ classMatch: { bestStartingMatch: key, overrideApplied: false }, classScores: { foundation: 4, lift: 6, hybrid: 12, hyrox: 31 }, axes: baseAxes });
+  }
+  // Foundation start, progressing to the conditioning class
+  cases.push({ classMatch: { bestStartingMatch: 'foundation', overrideApplied: true }, classScores: { foundation: 20, lift: 5, hybrid: 9, hyrox: 31 }, axes: baseAxes });
+  for (const stored of cases) {
+    // includes a summary stored before the rename, which still says the old name
+    const html = renderResultsPage({ clientName: 'Rename Test', result: stored, aiSummary: 'HYROX is the class we recommend.\n\nThe eight HYROX race stations plus HYROX-style cardio.' });
+    assert.doesNotMatch(html, /hyrox/i, `old name leaked for class ${stored.classMatch.bestStartingMatch}`);
+  }
+  const hyroxPage = renderResultsPage({ clientName: 'R', result: cases[3], aiSummary: '' });
+  assert.match(hyroxPage, /class="class__name">Circuits</);
+  const progressing = renderResultsPage({ clientName: 'R', result: cases[4], aiSummary: '' });
+  assert.match(progressing, /Where this leads[\s\S]*?<h3>Circuits<\/h3>/);
+  assert.match(progressing, /progress you towards Circuits/);
+});
+
+check('the AI summary is built, prompted and checked without the old name', () => {
+  for (const info of Object.values(summaryLib.CLASS_INFO)) {
+    assert.doesNotMatch(info.name + ' ' + info.meaning, /hyrox/i);
+  }
+  assert.equal(summaryLib.CLASS_INFO.hyrox.name, 'Circuits');
+  assert.doesNotMatch(summaryLib.SYSTEM_PROMPT, /hyrox/i, 'the prompt must not teach the model the old name');
+  const stored = { classMatch: { bestStartingMatch: 'hyrox', overrideApplied: false }, classScores: {}, axes: fixtures.LIFT.result.axes };
+  const facts = summaryLib.buildSummaryFacts(stored, ['Prepare for a HYROX event', 'Conditioning/HYROX-style training', 'Get stronger']);
+  assert.doesNotMatch(JSON.stringify(facts), /hyrox/i, 'facts handed to the model mention the old name');
+  assert.ok(facts.goals.some((g) => /fitness racing/.test(g)), 'a goal about the sport is kept, without the brand');
+  const prog = summaryLib.buildSummaryFacts({ classMatch: { bestStartingMatch: 'foundation', overrideApplied: true }, classScores: { lift: 3, hybrid: 5, hyrox: 30 }, axes: {} }, []);
+  assert.equal(prog.progressingToward.name, 'Circuits');
+  const words = Array.from({ length: 130 }, (_, i) => ['we', 'recommend', 'a', 'coached', 'class', 'for', 'you'][i % 7]).join(' ');
+  assert.equal(summaryLib.validateSummary(words + ' and Circuits.').ok, true, 'a clean summary should pass');
+  const rejected = summaryLib.validateSummary(words + ' and HYROX.');
+  assert.equal(rejected.ok, false);
+  assert.match(rejected.reason, /old class name/);
+});
+
+check('the positioning note survives the rename: Circuits is never presented as only for the fit or advanced', () => {
+  assert.match(summaryLib.CLASS_INFO.hyrox.meaning, /people of moderate fitness work at their own pace/);
+  assert.match(summaryLib.SYSTEM_PROMPT, /Never say or imply that Circuits is only for very fit, elite or advanced people/);
+  assert.match(summaryLib.SYSTEM_PROMPT, /Do not compare classes by intensity/);
+});
+
+check('only the label changed: stored keys and the GHL class_match value are untouched', () => {
+  assert.equal(classLib.classDisplayName('hyrox'), 'Circuits');
+  assert.deepEqual(Object.keys(summaryLib.CLASS_INFO), ['foundation', 'lift', 'hybrid', 'hyrox']);
+  const writer = fs.readFileSync(path.join(__dirname, '..', 'lib', 'writeAssessmentResult.js'), 'utf8');
+  assert.match(writer, /result\.classMatch\.bestStartingMatch/, 'class_match is still written from the engine key');
+  assert.doesNotMatch(writer, /classNames|classDisplayName|CLASS_DISPLAY_NAMES|Circuits/, 'the GHL writer must not use display names');
+  const engine = fs.readFileSync(path.join(__dirname, '..', 'index.js'), 'utf8');
+  assert.doesNotMatch(engine, /Circuits/, 'the scoring engine must not use the display name');
+  assert.match(engine, /hyrox: Math\.max\(0, scores\.hyrox\)/, 'engine scoring key unchanged');
 });
 
 check('message pages are branded and price-free', () => {

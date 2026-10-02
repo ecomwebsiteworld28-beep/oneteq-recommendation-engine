@@ -73,7 +73,7 @@ module.exports = async function handler(req, res) {
 
   if (dryRun) {
     // Review-only: force a class so wording can be checked for classes no
-    // real contact has yet (e.g. HYROX). Never used outside dry_run.
+    // real contact has yet (e.g. Circuits, key "hyrox"). Never used outside dry_run.
     if (['foundation', 'lift', 'hybrid', 'hyrox'].includes(body.class_override)) {
       storedResult.classMatch = { bestStartingMatch: body.class_override, overrideApplied: false };
     }

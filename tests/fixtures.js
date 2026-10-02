@@ -77,7 +77,7 @@ const HYROX_UNRESOLVED = {
     ptNeed: { unresolved: true },
     ...PRICED_PACKAGE,
   },
-  aiSummary: 'HYROX is the class we have recommended for you.\n\nThe team would be glad to talk it through whenever suits you.',
+  aiSummary: 'Circuits is the class we have recommended for you.\n\nThe team would be glad to talk it through whenever suits you.',
 };
 
 const NO_CLASS = {
