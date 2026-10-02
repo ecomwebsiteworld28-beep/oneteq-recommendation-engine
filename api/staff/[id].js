@@ -22,6 +22,7 @@ const {
   deriveQ22Flags,
   deriveEventAndRiskFlags,
   PREFERRED_STYLE_OPTION_TO_VALUE,
+  canonicalPreferredStyleOption,
   CLINICAL_BARRIER_OPTION_TO_VALUE,
   INDIVIDUAL_ATTENTION_DEFAULT,
 } = require('../../lib/deriveFlags.js');
@@ -65,7 +66,7 @@ const STAFF_ASSESSMENT_DEFAULTS = {
 function getStaffAssessmentRawValues(contact) {
   return {
     preferredTrainingStyle:
-      scalarAnswer(getCustomFieldValue(contact, GHL_CUSTOM_FIELD_IDS.preferredTrainingStyle)) ||
+      canonicalPreferredStyleOption(scalarAnswer(getCustomFieldValue(contact, GHL_CUSTOM_FIELD_IDS.preferredTrainingStyle))) ||
       STAFF_ASSESSMENT_DEFAULTS.preferredTrainingStyle,
     individualAttentionPreference:
       scalarAnswer(getCustomFieldValue(contact, GHL_CUSTOM_FIELD_IDS.individualAttentionPreference)) ||

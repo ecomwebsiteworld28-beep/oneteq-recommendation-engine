@@ -40,7 +40,10 @@ const visibleText = (html) =>
 
 for (const { fixture, html } of pages) {
   check(`no prices on the page: ${fixture.name}`, () => {
-    const text = visibleText(html);
+    // The call to action invites a pricing conversation ("discuss pricing"). That label is the one
+    // allowed use of the word; everything else on the page is still scanned, and so is every digit and symbol.
+    const text = visibleText(html).split(CTA_LABEL).join(' ');
+    assert.ok(visibleText(html).includes(CTA_LABEL), 'call to action label missing');
     assert.doesNotMatch(html, /[£$€]/, 'currency symbol in page');
     assert.doesNotMatch(text, PRICE_WORDS, 'price wording in page text');
     for (const value of PRICE_VALUES) assert.ok(!html.includes(value), `price value ${value} leaked into page`);
@@ -116,11 +119,20 @@ check('the internal class note is not shown to clients', () => {
   assert.doesNotMatch(html, /Override applied/);
 });
 
-check('class sits at GymTEQ and physio at PhysioTEQ; other areas carry no brand', () => {
+check('brand ownership: class at GymTEQ; physio and recovery at PhysioTEQ; nutrition with the ONETEQ Health team', () => {
   const { html } = pages.find(({ fixture }) => fixture === fixtures.LIFT);
   assert.match(html, /At GymTEQ/);
-  assert.match(html, /Physiotherapy and clinical support at PhysioTEQ/);
-  assert.doesNotMatch(html, /(?:nutrition|recovery)[^<]{0,40}(?:GymTEQ|PhysioTEQ)/i);
+  const card = (title) => {
+    const m = html.match(new RegExp('<h3>' + title + '</h3>[\\s\\S]*?</li>'));
+    assert.ok(m, 'no card for ' + title);
+    return m[0];
+  };
+  assert.match(card('Physiotherapy and clinical support'), /Physiotherapy and clinical support at PhysioTEQ/);
+  assert.match(card('Recovery support'), /PhysioTEQ can help with rest, sleep and recovery work/);
+  assert.match(card('Nutrition support'), /The ONETEQ Health team can help with practical advice on eating well/);
+  assert.doesNotMatch(card('Recovery support') + card('Nutrition support'), /GymTEQ/);
+  assert.doesNotMatch(card('Nutrition support'), /PhysioTEQ/);
+  assert.doesNotMatch(html, /The team can help with/, 'a support card still says the generic "the team"');
 });
 
 check('support cards each have their own sentence, and the tag only shows when bands differ', () => {
@@ -238,7 +250,7 @@ check('the AI summary is built, prompted and checked without the old name', () =
 });
 
 check('the positioning note survives the rename: Circuits is never presented as only for the fit or advanced', () => {
-  assert.match(summaryLib.CLASS_INFO.hyrox.meaning, /people of moderate fitness work at their own pace/);
+  assert.match(summaryLib.CLASS_INFO.hyrox.meaning, /Each exercise can be adapted to suit your ability, allowing you to work at your own pace/);
   assert.match(summaryLib.SYSTEM_PROMPT, /Never say or imply that Circuits is only for very fit, elite or advanced people/);
   assert.match(summaryLib.SYSTEM_PROMPT, /Do not compare classes by intensity/);
 });
@@ -252,6 +264,67 @@ check('only the label changed: stored keys and the GHL class_match value are unt
   const engine = fs.readFileSync(path.join(__dirname, '..', 'index.js'), 'utf8');
   assert.doesNotMatch(engine, /Circuits/, 'the scoring engine must not use the display name');
   assert.match(engine, /hyrox: Math\.max\(0, scores\.hyrox\)/, 'engine scoring key unchanged');
+});
+
+const OFFICIAL_CIRCUITS =
+  "Circuits is a full-body workout combining strength and cardio exercises in one varied, energetic session. You'll move through a series of stations designed to improve cardiovascular fitness, strength, stamina and muscular endurance. Each exercise can be adapted to suit your ability, allowing you to work at your own pace while still challenging yourself. With a mixture of functional strength and cardio exercises, Circuits is a simple, effective and enjoyable way to get fitter and stronger.";
+
+check('the Circuits description is the client\'s official wording, verbatim, wherever it is shown', () => {
+  assert.equal(summaryLib.CLASS_INFO.hyrox.meaning, OFFICIAL_CIRCUITS);
+  const stored = { classMatch: { bestStartingMatch: 'hyrox', overrideApplied: false }, classScores: {}, axes: fixtures.LIFT.result.axes };
+  const page = renderResultsPage({ clientName: 'R', result: stored, aiSummary: '' });
+  assert.ok(page.includes(OFFICIAL_CIRCUITS.split("'").join('&#39;')), 'class card does not carry the official text');
+  const progressing = renderResultsPage({
+    clientName: 'R',
+    result: { classMatch: { bestStartingMatch: 'foundation', overrideApplied: true }, classScores: { foundation: 20, lift: 5, hybrid: 9, hyrox: 31 }, axes: fixtures.LIFT.result.axes },
+    aiSummary: '',
+  });
+  assert.ok(progressing.includes(OFFICIAL_CIRCUITS.split("'").join('&#39;')), '"Where this leads" does not carry the official text');
+  assert.doesNotMatch(OFFICIAL_CIRCUITS, /hyrox|eight|station[s]? plus/i);
+});
+
+check('no class description collides with the Circuits name', () => {
+  assert.doesNotMatch(summaryLib.CLASS_INFO.lift.meaning, /circuit/i, 'Lift still uses the word circuit');
+  assert.match(summaryLib.CLASS_INFO.lift.meaning, /^Lift always begins with a barbell lift, followed by a pair of weighted exercises done as a superset, and finishes with a final block of strength exercises\.$/);
+  for (const key of ['foundation', 'hybrid']) assert.doesNotMatch(summaryLib.CLASS_INFO[key].meaning.replace(/Circuits\.$/, ''), /circuit/i);
+});
+
+check('the AI summary checks enforce brand ownership', () => {
+  const words = Array.from({ length: 130 }, (_, i) => ['we', 'recommend', 'a', 'coached', 'class', 'for', 'you'][i % 7]).join(' ');
+  const verdict = (sentence) => summaryLib.validateSummary(words + ' ' + sentence);
+  for (const ok of [
+    'The ONETEQ Health team can go through nutrition support with you.',
+    'Fitness and metabolic testing with the ONETEQ Health team may be useful.',
+    'Recovery work at PhysioTEQ could help.',
+    'Physiotherapy at PhysioTEQ could help.',
+  ]) assert.equal(verdict(ok).ok, true, 'should pass: ' + ok);
+  for (const bad of [
+    'Nutrition support with PhysioTEQ could help.',
+    'Nutrition support at GymTEQ could help.',
+    'Fitness and metabolic testing at GymTEQ may be useful.',
+    'Recovery support at GymTEQ could help.',
+    'You can train at ONETEQ.',
+    'Speak to the ONETEQ team.',
+  ]) assert.equal(verdict(bad).ok, false, 'should be rejected: ' + bad);
+  const stored = { classMatch: { bestStartingMatch: 'lift' }, axes: {}, tieredPackages: { recommended: { lineItems: [
+    { productId: 'nutrition_essentials' }, { productId: 'sports_massage' }, { productId: 'rmr_test' }, { productId: 'physio_initial' },
+  ] } } };
+  const areas = summaryLib.buildSummaryFacts(stored, []).supportAreas;
+  assert.deepEqual(areas, [
+    'nutrition support with the ONETEQ Health team',
+    'sports massage and recovery work at PhysioTEQ',
+    'fitness and metabolic testing with the ONETEQ Health team',
+    'physiotherapy at PhysioTEQ',
+  ]);
+  assert.match(summaryLib.SYSTEM_PROMPT, /ONETEQ Health team/);
+});
+
+check('the call to action label and constant', () => {
+  const clientLib = require('../lib/clientPage.js');
+  assert.equal(clientLib.CTA_LABEL, 'Click here to discuss pricing or request a call back from one of the team');
+  assert.equal(typeof clientLib.CTA_URL, 'string');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'clientPage.js'), 'utf8');
+  assert.equal((src.match(/^const CTA_URL = /gm) || []).length, 1, 'CTA_URL must stay a single named constant');
 });
 
 check('message pages are branded and price-free', () => {
