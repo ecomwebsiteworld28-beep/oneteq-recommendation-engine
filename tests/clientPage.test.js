@@ -371,6 +371,17 @@ check('the call to action label and constant', () => {
   assert.equal((src.match(/^const CTA_URL = /gm) || []).length, 1, 'CTA_URL must stay a single named constant');
 });
 
+check('the class card eyebrow is "The class in detail" under a summary, "Your best starting class" otherwise', () => {
+  const withSummary = pages.find(({ fixture }) => fixture === fixtures.LIFT_WITH_SUMMARY).html;
+  const without = pages.find(({ fixture }) => fixture === fixtures.LIFT).html;
+  const eyebrowOf = (html) => html.match(/id="(?:class-detail|recommendation)" aria-labelledby="class-title">\s*<p class="eyebrow">([^<]+)<\/p>/)[1];
+  assert.equal(eyebrowOf(withSummary), 'The class in detail');
+  assert.equal(eyebrowOf(without), 'Your best starting class');
+  assert.ok(!withSummary.includes('<p class="eyebrow">Your best starting class</p>'), 'old eyebrow still present beside a summary');
+  const noClass = pages.find(({ fixture }) => fixture === fixtures.NO_CLASS).html;
+  assert.match(noClass, /<p class="eyebrow">Your best starting class<\/p>\s*<h2 id="class-title">To be confirmed with you/);
+});
+
 check('message pages are branded and price-free', () => {
   for (const html of messages) {
     assert.match(html, /--navy: #001020/);

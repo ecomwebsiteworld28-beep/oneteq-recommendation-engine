@@ -7,6 +7,7 @@
 // stored on the contact, so it explains exactly what was decided and never
 // re-scores anything.
 
+const crypto = require('crypto');
 const { getGhlContact } = require('../lib/ghl.js');
 const { buildAnswersAndGoalFields, buildGoals } = require('../lib/deriveFlags.js');
 const {
@@ -16,6 +17,19 @@ const {
   parseStoredResult,
   isSummaryEnabled,
 } = require('../lib/aiSummary.js');
+
+// Real (storing) calls come from the GHL workflow and must carry a shared secret in
+// the x-summary-secret header. Contact ids are in the results-page URLs clients receive,
+// so without this anyone holding a link could trigger a paid model call and overwrite
+// that client's summary. Fails closed: if SUMMARY_WEBHOOK_SECRET is not set on the
+// deployment, no real call is accepted. Compared via SHA-256 digests in constant time.
+function hasValidSecret(req) {
+  const expected = process.env.SUMMARY_WEBHOOK_SECRET;
+  const given = req.headers && req.headers['x-summary-secret'];
+  if (!expected || typeof given !== 'string' || !given) return false;
+  const digest = (value) => crypto.createHash('sha256').update(value).digest();
+  return crypto.timingSafeEqual(digest(expected), digest(given));
+}
 
 function resolveContactId(body) {
   const source = body.customData || body;
@@ -35,21 +49,25 @@ module.exports = async function handler(req, res) {
   }
 
   const body = req.body || {};
-  const contactId = resolveContactId(body);
-  if (!contactId) {
-    return res.status(400).json({ status: 'error', message: 'Missing contact_id.' });
-  }
 
-  // dry_run generates and validates a summary and returns it WITHOUT
-  // storing anything or needing AI_SUMMARY_ENABLED - for reviewing the
-  // wording before going live. Staff-password gated, since it also returns
-  // the facts the model was given.
+  // Authentication comes first, before anything is read, fetched or generated.
+  // dry_run generates and validates a summary and returns it WITHOUT storing
+  // anything or needing AI_SUMMARY_ENABLED - for reviewing the wording before
+  // going live. Staff-password gated, since it also returns the facts the model
+  // was given. Every other call is the workflow's real one and needs the secret.
   const dryRun = body.dry_run === true;
   if (dryRun) {
     const password = process.env.STAFF_PAGE_PASSWORD;
     if (!password || req.headers['x-staff-password'] !== password) {
       return res.status(401).json({ status: 'error', message: 'dry_run requires the staff password.' });
     }
+  } else if (!hasValidSecret(req)) {
+    return res.status(401).json({ status: 'error', message: 'Missing or invalid x-summary-secret header.' });
+  }
+
+  const contactId = resolveContactId(body);
+  if (!contactId) {
+    return res.status(400).json({ status: 'error', message: 'Missing contact_id.' });
   }
 
   let contact;
