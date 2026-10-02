@@ -617,6 +617,9 @@ function renderUnlockedPage(contact, result, id) {
       .agreed-plan-totals { font-size: 0.98rem; color: var(--muted); }
       .agreed-plan-totals strong { font-size: 1.5rem; color: var(--white); }
       .save-btn { margin-top: 14px; }
+      .agreed-plan-pending { margin-top: 14px; font-size: 0.88rem; line-height: 1.5; }
+      .agreed-plan-pending[hidden] { display: none; }
+      .agreed-plan-pending strong { color: #fff; }
 
       .staff-assessment { margin-top: 4px; padding: 16px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; }
       .staff-assessment-grid { display: flex; flex-wrap: wrap; gap: 16px; }
@@ -742,6 +745,10 @@ function renderUnlockedPage(contact, result, id) {
         <div><strong id="live-monthly-total">£0</strong> / month recurring</div>
         <div><strong id="live-oneoff-total">£0</strong> one-off</div>
       </div>
+      <div id="pending-plan" class="note-warn agreed-plan-pending" hidden>
+        <strong>Some items are still undecided.</strong> Deferred items are not in the totals above, and only accepted items are saved.
+        If every deferred item were accepted the plan would be <strong id="pending-monthly">£0</strong> / month and <strong id="pending-oneoff">£0</strong> one-off, which is what the tier card shows.
+      </div>
       <button id="save-final-package" type="button" class="button save-btn">Save Agreed Plan</button>
       <span id="save-status" class="status-text"></span>
     </div>
@@ -829,34 +836,39 @@ function renderUnlockedPage(contact, result, id) {
       // hand; the server re-derives this independently from the same
       // sanitization rules, so a mismatch here only affects the live
       // number shown, never what gets saved.
-      function expandToProductIds(components) {
+      // <pricing-mirror> (pure: no DOM access; tests/staffTotals.test.js runs this block)
+      // includeDeferred=false prices exactly what would be saved (accepted
+      // items only). includeDeferred=true also counts deferred items, i.e.
+      // what the plan would cost if every undecided item were accepted -
+      // which is what the Essential / Recommended / VIP tier cards show.
+      function expandToProductIds(components, includeDeferred) {
+        function counts(status) {
+          return status === 'accepted' || (includeDeferred && status === 'deferred');
+        }
         var ids = [];
-        if (components.membership.status === 'accepted' && components.membership.level !== 'none') {
+        if (counts(components.membership.status) && components.membership.level !== 'none') {
           ids.push(components.membership.level);
         }
-        if (components.coachingFrequency.status === 'accepted' && components.coachingFrequency.value !== 'none') {
+        if (counts(components.coachingFrequency.status) && components.coachingFrequency.value !== 'none') {
           ids.push(components.coachingFrequency.value);
         }
-        if (components.nutrition.status === 'accepted') {
+        if (counts(components.nutrition.status)) {
           if (components.nutrition.level !== 'none') ids.push(components.nutrition.level);
           NUTRITION_ADDON_KEYS.forEach(function (key) {
             if (components.nutrition.addons[key]) ids.push(key);
           });
         }
-        if (components.recovery.status === 'accepted') {
+        if (counts(components.recovery.status)) {
           for (var i = 0; i < components.recovery.quantity; i++) ids.push('sports_massage');
         }
         TOGGLE_COMPONENT_IDS.forEach(function (id) {
-          if (components[id].status === 'accepted') ids.push(COMPONENT_PRODUCT_KEYS[id]);
+          if (counts(components[id].status)) ids.push(COMPONENT_PRODUCT_KEYS[id]);
         });
         return ids;
       }
 
-      function recompute() {
-        var components = readComponentState();
-        var productIds = expandToProductIds(components);
+      function priceProductIds(productIds) {
         var qualifies = productIds.some(function (key) { return QUALIFYING_KEYS[key]; });
-
         var monthly = 0, oneOff = 0;
         productIds.forEach(function (key) {
           var item = PRICE_MAP[key];
@@ -865,9 +877,31 @@ function renderUnlockedPage(contact, result, id) {
           if (item.billing === 'RECURRING_MONTHLY') monthly += price;
           else oneOff += price;
         });
+        return { monthly: monthly, oneOff: oneOff };
+      }
+      // </pricing-mirror>
 
-        monthlyEl.textContent = formatMoney(monthly);
-        oneOffEl.textContent = formatMoney(oneOff);
+      function recompute() {
+        var components = readComponentState();
+        var acceptedIds = expandToProductIds(components, false);
+        var accepted = priceProductIds(acceptedIds);
+        monthlyEl.textContent = formatMoney(accepted.monthly);
+        oneOffEl.textContent = formatMoney(accepted.oneOff);
+
+        // Deferred items (a VIP-only extra, or a suggested membership) are
+        // deliberately not in the totals above until staff accept them. Say
+        // so, and show the total if they were all accepted, so a half-decided
+        // plan can't be mistaken for the full tier on the card.
+        var allIds = expandToProductIds(components, true);
+        var pendingEl = document.getElementById('pending-plan');
+        if (allIds.length > acceptedIds.length) {
+          var all = priceProductIds(allIds);
+          document.getElementById('pending-monthly').textContent = formatMoney(all.monthly);
+          document.getElementById('pending-oneoff').textContent = formatMoney(all.oneOff);
+          pendingEl.hidden = false;
+        } else {
+          pendingEl.hidden = true;
+        }
       }
 
       function applyTriState(row, status) {
@@ -1348,4 +1382,13 @@ module.exports = async function handler(req, res) {
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.status(200).send(renderUnlockedPage(contact, result, id));
+};
+
+// Exposed for tests (tests/staffTotals.test.js): the pure tier -> form state -> price path.
+module.exports.internals = {
+  buildComponentsFromTier,
+  expandComponentsToProductIds,
+  sanitizeComponentState,
+  MEMBERSHIP_OR_COACHING_KEYS,
+  renderUnlockedPage,
 };
