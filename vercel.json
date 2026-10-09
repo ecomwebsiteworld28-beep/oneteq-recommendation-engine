@@ -5,6 +5,12 @@
     },
     "api/staff/[id].js": {
       "maxDuration": 30
+    },
+    "api/results/[id].js": {
+      "maxDuration": 30
+    },
+    "api/summary-status/[id].js": {
+      "maxDuration": 15
     }
   },
   "rewrites": [

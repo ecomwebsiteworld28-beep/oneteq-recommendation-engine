@@ -5,6 +5,6 @@
     "@anthropic-ai/sdk": "^0.128.0"
   },
   "scripts": {
-    "test": "node tests/clientPage.test.js && node tests/staffTotals.test.js && node tests/deriveFlags.test.js && node tests/summaryEndpoint.test.js && node tests/summaryWording.test.js && node tests/summaryRetry.test.js"
+    "test": "node tests/clientPage.test.js && node tests/staffTotals.test.js && node tests/deriveFlags.test.js && node tests/summaryEndpoint.test.js && node tests/summaryWording.test.js && node tests/summaryRetry.test.js && node tests/instantResults.test.js"
   }
 }

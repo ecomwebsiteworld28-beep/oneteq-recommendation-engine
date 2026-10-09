@@ -1,14 +1,15 @@
 // ONETEQ AI summary endpoint.
 //
-// Called by a separate GHL workflow webhook action (after the workflow's
-// existing Wait, so there is no time pressure on the AI call) rather than
+// Called by a separate GHL workflow webhook action (directly after the scoring webhook, so the
+// client's results page can pick the summary up while they are looking at it) rather than
 // from api/assessment.js - the scoring response GHL is waiting on is never
-// delayed by, or dependent on, this. Reads the assessment result already
+// delayed by, or dependent on, this. Safe to call more than once: a contact that already
+// has a stored summary is skipped (send force: true to regenerate). Reads the assessment result already
 // stored on the contact, so it explains exactly what was decided and never
 // re-scores anything.
 
 const crypto = require('crypto');
-const { getGhlContact } = require('../lib/ghl.js');
+const { getGhlContact, getCustomFieldValue, GHL_CUSTOM_FIELD_IDS } = require('../lib/ghl.js');
 const { buildAnswersAndGoalFields, buildGoals } = require('../lib/deriveFlags.js');
 const {
   buildSummaryFacts,
@@ -79,6 +80,13 @@ module.exports = async function handler(req, res) {
   }
   if (!contact) {
     return res.status(404).json({ status: 'error', message: `No GHL contact found for ${contactId}.` });
+  }
+
+  // Idempotent: the workflow may call this twice (before and after its Wait). A summary that is
+  // already stored is left alone, so a repeat call costs nothing and never rewrites what the client has seen.
+  if (!dryRun && body.force !== true) {
+    const existing = String(getCustomFieldValue(contact, GHL_CUSTOM_FIELD_IDS.aiClientSummary) || '').trim();
+    if (existing) return res.status(200).json({ status: 'skipped', reason: 'summary already stored' });
   }
 
   const storedResult = parseStoredResult(contact);
