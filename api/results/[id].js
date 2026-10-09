@@ -1,71 +1,66 @@
 // ONETEQ client results page.
-// Looks up a GHL contact by id (the same id used as this page's URL
-// segment), reads the assessment result and AI summary stored on it, and
-// renders the client-facing page (lib/clientPage.js). No prices are shown
-// here; the tiered packages live on the staff page only.
+//
+// The survey redirects here the moment it is submitted, usually before scoring has landed in GHL,
+// so this handler is built to be arrived at early (see lib/resultsLoader.js): it shows the stored
+// result, or scores the answers itself, or shows a "preparing" page that retries by itself.
+// It never answers with an error status or an error page for a visitor who is just early.
+// No prices anywhere here; the tiered packages are staff-only.
 
-const {
-  GHL_CUSTOM_FIELD_IDS,
-  getGhlContact,
-  getCustomFieldValue,
-} = require('../../lib/ghl.js');
-const { renderResultsPage, renderMessagePage } = require('../../lib/clientPage.js');
+const { SAFE_ID } = require('../../lib/summaryPending.js');
+const { renderResultsPage } = require('../../lib/clientPage.js');
+const { renderPreparingPage, renderSoftPage, MAX_SLOW_TRIES, MAX_NOT_FOUND_TRIES } = require('../../lib/resultsStates.js');
 
-module.exports = async function handler(req, res) {
-  const { id } = req.query;
+function createHandler(deps = {}) {
+  const loadResults = deps.loadResults || require('../../lib/resultsLoader.js').loadResultsForPage;
+  const summaryEnabled = deps.isSummaryEnabled || (() => require('../../lib/aiSummary.js').isSummaryEnabled());
 
-  // Client health information: keep it out of search engines.
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+  return async function handler(req, res) {
+    const id = String((req.query && req.query.id) || '');
+    const attempt = Math.max(0, Math.min(parseInt(req.query && req.query.w, 10) || 0, 99));
+    const isPoll = Boolean(req.headers && req.headers['x-results-poll']);
 
-  if (!id) {
-    res.status(400).send(renderMessagePage('Missing result id', 'Missing result id', 'No id was provided in the URL.'));
-    return;
-  }
+    // Client health information: keep it out of search engines and out of caches.
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+    res.setHeader('Cache-Control', 'private, no-store');
 
-  let contact;
-  try {
-    contact = await getGhlContact(id);
-  } catch (error) {
-    console.error('Failed to fetch GHL contact for results page:', error.message);
-    res
-      .status(502)
-      .send(renderMessagePage('Could not load results', 'Could not load this result right now', 'Please try again shortly.'));
-    return;
-  }
+    const send = (state, html) => {
+      res.setHeader('X-Results-State', state);
+      // A poll only needs the state; do not ship a whole page for it.
+      return res.status(200).send(isPoll ? '' : html);
+    };
 
-  if (!contact) {
-    res.status(404).send(renderMessagePage('Result not found', 'Result not found', 'No contact matches this link.'));
-    return;
-  }
+    if (!SAFE_ID.test(id)) return send('notfound', renderSoftPage({ kind: 'notfound' }));
 
-  const rawResponse = getCustomFieldValue(contact, GHL_CUSTOM_FIELD_IDS.assessmentRawResponse);
+    const loaded = await loadResults(id);
 
-  let result;
-  try {
-    result = JSON.parse(rawResponse);
-  } catch (error) {
-    console.error(`Could not parse Assessment_Raw_Response for contact ${id}:`, error.message);
-    res
-      .status(404)
-      .send(
-        renderMessagePage(
-          'No results yet',
-          'No assessment result found',
-          'This assessment has not been completed yet, or the result has not saved.',
-        ),
+    if (loaded.kind === 'ready') {
+      const { contact, result, summary } = loaded;
+      const clientName =
+        [contact.firstName, contact.lastName].filter(Boolean).join(' ') || contact.name || 'Your results';
+      return send(
+        'ready',
+        renderResultsPage({
+          clientName,
+          result,
+          aiSummary: summary,
+          // Not stored yet but the summaries are switched on: a placeholder fills in when the workflow's
+          // summary webhook lands (this page never generates it itself).
+          summaryPending: !summary && summaryEnabled(),
+          contactId: id,
+        }),
       );
-    return;
-  }
+    }
 
-  const clientName =
-    [contact.firstName, contact.lastName].filter(Boolean).join(' ') ||
-    contact.name ||
-    'Your results';
+    // Not ready yet. Keep retrying by itself, then fall back softly. Never an error.
+    const notFound = loaded.reason === 'not-found';
+    const cap = notFound ? MAX_NOT_FOUND_TRIES : MAX_SLOW_TRIES;
+    if (attempt >= cap) {
+      return send(notFound ? 'notfound' : 'gaveup', renderSoftPage({ kind: notFound ? 'notfound' : 'gaveup', retryHref: req.url ? req.url.split('?')[0] : '' }));
+    }
+    return send('preparing', renderPreparingPage({ attempt }));
+  };
+}
 
-  // Written by lib/aiSummary.js and stored once at scoring time - only ever
-  // read here, never generated on page load. Absent simply hides the section.
-  const aiSummary = String(getCustomFieldValue(contact, GHL_CUSTOM_FIELD_IDS.aiClientSummary) || '').trim();
-
-  res.status(200).send(renderResultsPage({ clientName, result, aiSummary }));
-};
+module.exports = createHandler();
+module.exports.createHandler = createHandler;
